@@ -3,186 +3,181 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Medidor de Nitrato</title>
+  <title>Medidor de Color - Nitrato</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f5f7fa;
+      background: #f5f5f5;
       margin: 0;
       padding: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       min-height: 100vh;
     }
-    header {
-      background: #ffffff;
-      padding: 1rem;
-      width: 100%;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    h1 {
+      font-size: 6vw;
+      margin: 10px 0;
+      color: #222;
       text-align: center;
-      font-weight: bold;
-      font-size: 1.3rem;
-    }
-    main {
-      flex: 1;
-      width: 100%;
-      max-width: 600px;
-      padding: 1rem;
-      box-sizing: border-box;
-    }
-    .video-container {
-      position: relative;
-      width: 100%;
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 1rem;
     }
     video {
-      width: 100%;
-      display: block;
+      border: 2px solid #333;
+      border-radius: 12px;
+      max-width: 95%;
+      height: auto;
     }
-    #guide {
+    canvas {
+      display: none;
+    }
+    #target {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 120px;
-      height: 120px;
-      margin-left: -60px;
-      margin-top: -60px;
-      border: 3px solid rgba(0, 123, 255, 0.8);
-      border-radius: 8px;
-      box-sizing: border-box;
+      border: 2px dashed red;
       pointer-events: none;
     }
-    .controls {
-      display: flex;
-      flex-direction: column;
-      gap: 0.8rem;
+    #colorBox {
+      width: 80px;
+      height: 80px;
+      border: 2px solid #333;
+      margin: 10px;
+    }
+    #result {
+      font-size: 4.5vw;
+      text-align: center;
+      margin: 10px;
+      color: #333;
     }
     button {
-      padding: 1rem;
+      font-size: 5vw;
+      padding: 10px 20px;
+      margin: 10px;
       border: none;
-      border-radius: 6px;
-      background: #007bff;
+      border-radius: 10px;
+      background: #0077cc;
       color: white;
-      font-size: 1.1rem;
       cursor: pointer;
     }
     button:hover {
-      background: #0056b3;
+      background: #005fa3;
     }
-    .result {
-      margin-top: 1rem;
-      padding: 1.2rem;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      text-align: center;
-      font-size: 1.2rem;
-    }
-    .color-box {
-      width: 50px;
-      height: 50px;
-      display: inline-block;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      margin-top: 0.5rem;
-    }
-    @media (max-width: 600px) {
-      header {
-        font-size: 1.5rem;
-      }
-      button {
-        font-size: 1.2rem;
-        padding: 1.2rem;
-      }
-      .result {
-        font-size: 1.3rem;
-      }
+    @media (min-width: 768px) {
+      h1 { font-size: 2vw; }
+      #result { font-size: 1.2vw; }
+      button { font-size: 1.2vw; }
     }
   </style>
 </head>
 <body>
-  <header>Medidor de Nitrato (NO₃⁻)</header>
-  <main>
-    <div class="video-container">
-      <video id="video" autoplay playsinline></video>
-      <div id="guide"></div>
-    </div>
-    <canvas id="canvas" hidden></canvas>
-    <div class="controls">
-      <button id="start">Iniciar cámara</button>
-      <button id="analyze">Analizar color</button>
-    </div>
-    <div class="result" id="result">Resultado: aún no medido</div>
-  </main>
+  <h1>Medidor de Nitrato</h1>
+  <div style="position: relative; display: inline-block;">
+    <video id="video" autoplay playsinline></video>
+    <div id="target"></div>
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="colorBox"></div>
+  <div id="result">Esperando medición...</div>
+  <button id="measureBtn">Medir Color</button>
 
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const resultDiv = document.getElementById('result');
+    const target = document.getElementById('target');
+    const result = document.getElementById('result');
+    const colorBox = document.getElementById('colorBox');
+    const measureBtn = document.getElementById('measureBtn');
 
-    const nitrateReference = [
-      { ppm: 0,   rgb: [252, 245, 240] },
-      { ppm: 20,  rgb: [246, 196, 206] },
-      { ppm: 40,  rgb: [237, 151, 178] },
-      { ppm: 80,  rgb: [228, 110, 150] },
-      { ppm: 160, rgb: [213, 60, 130] },
-      { ppm: 200, rgb: [200, 30, 120] }
-    ];
+    // Iniciar cámara
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => { alert("Error al acceder a la cámara: " + err); });
 
-    document.getElementById('start').addEventListener('click', async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        video.srcObject = stream;
-      } catch (err) {
-        alert('Error al acceder a la cámara: ' + err);
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(x => {
+        const hex = Math.round(x).toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+      }).join("");
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) {
+        h = s = 0;
+      } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
       }
-    });
+      return [h * 360, s * 100, l * 100];
+    }
 
-    document.getElementById('analyze').addEventListener('click', () => {
+    function measureColor() {
+      const ctx = canvas.getContext('2d');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Calcular área del recuadro central
-      const boxSize = 120;
-      const x = canvas.width / 2 - boxSize / 2;
-      const y = canvas.height / 2 - boxSize / 2;
-      const imageData = ctx.getImageData(x, y, boxSize, boxSize);
+      const rectSize = canvas.width * 0.1; // recuadro más chico
+      const x = (canvas.width - rectSize) / 2;
+      const y = (canvas.height - rectSize) / 2;
 
-      let r = 0, g = 0, b = 0;
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        r += imageData.data[i];
-        g += imageData.data[i+1];
-        b += imageData.data[i+2];
-      }
-      const pixels = imageData.data.length / 4;
-      r = Math.round(r / pixels);
-      g = Math.round(g / pixels);
-      b = Math.round(b / pixels);
+      const imageData = ctx.getImageData(x, y, rectSize, rectSize);
+      const data = imageData.data;
 
-      // Comparar con referencia
-      let bestMatch = null;
-      let minDist = Infinity;
-      nitrateReference.forEach(ref => {
-        const dist = Math.sqrt(
-          Math.pow(r - ref.rgb[0], 2) +
-          Math.pow(g - ref.rgb[1], 2) +
-          Math.pow(b - ref.rgb[2], 2)
-        );
-        if (dist < minDist) {
-          minDist = dist;
-          bestMatch = ref;
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const red = data[i];
+        const green = data[i + 1];
+        const blue = data[i + 2];
+        // Ignorar fondo blanco brillante
+        if (!(red > 240 && green > 240 && blue > 240)) {
+          r += red;
+          g += green;
+          b += blue;
+          count++;
         }
-      });
+      }
 
-      resultDiv.innerHTML = `
-        Resultado estimado: <b>${bestMatch.ppm} ppm</b><br>
-        Color detectado: <span class="color-box" style="background: rgb(${r},${g},${b})"></span>
+      if (count === 0) {
+        result.textContent = "No se detectó color válido.";
+        return;
+      }
+
+      r = r / count;
+      g = g / count;
+      b = b / count;
+
+      const hex = rgbToHex(r, g, b);
+      const [h, s, l] = rgbToHsl(r, g, b);
+
+      colorBox.style.backgroundColor = hex;
+      result.innerHTML = `
+        RGB: (${r.toFixed(2)}, ${g.toFixed(2)}, ${b.toFixed(2)})<br>
+        HEX: ${hex}<br>
+        HSL: (${h.toFixed(1)}°, ${s.toFixed(1)}%, ${l.toFixed(1)}%)
       `;
+    }
+
+    measureBtn.addEventListener('click', measureColor);
+
+    // Dibujar el recuadro de apuntado
+    video.addEventListener('loadedmetadata', () => {
+      function updateTarget() {
+        const rectSize = video.offsetWidth * 0.2;
+        target.style.width = rectSize + "px";
+        target.style.height = rectSize + "px";
+        target.style.left = (video.offsetLeft + (video.offsetWidth - rectSize) / 2) + "px";
+        target.style.top = (video.offsetTop + (video.offsetHeight - rectSize) / 2) + "px";
+      }
+      updateTarget();
+      window.addEventListener('resize', updateTarget);
     });
   </script>
 </body>
