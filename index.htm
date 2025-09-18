@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prototipo: Medidor de tiras (HTML/JS)</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0; padding:14px; background:#fafafa; color:#111}
+    h1{font-size:18px; margin:0 0 10px}
+    #controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px}
+    #controls > *{font-size:14px}
+    button{padding:8px 10px; border-radius:6px; border:1px solid #ddd; background:white}
+    #canvas{width:100%; max-width:720px; height:auto; background:#222; border-radius:8px; display:block}
+    #results{margin-top:12px; display:flex; gap:8px; flex-wrap:wrap}
+    .swatch{width:64px; padding:8px; border-radius:6px; text-align:center; font-size:12px; color:#111; border:1px solid #ddd}
+    .note{font-size:12px; color:#444}
+    label{display:flex; gap:6px; align-items:center}
+  </style>
+</head>
+<body>
+  <h1>Prototipo: Medidor de tiras (HTML/JS)</h1>
+  <div id="controls">
+    <label>Casillas:
+      <input id="numBoxes" type="number" min="1" max="12" value="8" style="width:64px;padding:6px;border-radius:6px;border:1px solid #ccc">
+    </label>
+    <button id="startBtn">Iniciar cámara</button>
+    <button id="setWhiteBtn">Capturar referencia blanca</button>
+    <button id="analyzeBtn">Analizar</button>
+    <button id="downloadBtn">Descargar CSV</button>
+    <label style="margin-left:8px"><input type="checkbox" id="showGrid" checked> Mostrar guía</label>
+  </div>
+
+  <canvas id="canvas"></canvas>
+  <div class="note">Consejos: usar luz blanca constante (LED 5600K), difusor, mantener la cámara perpendicular a la tira y distancia fija.</div>
+
+  <div id="results"></div>
+
+<script>
+// Prototipo simple: abre la cámara trasera, dibuja el video en canvas y superpone un conjunto vertical de rectángulos
+// Al presionar 'Analizar' calcula el color promedio de cada rectángulo y lo muestra.
+
+const startBtn = document.getElementById('startBtn');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const setWhiteBtn = document.getElementById('setWhiteBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const numBoxesInput = document.getElementById('numBoxes');
+const showGridChk = document.getElementById('showGrid');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const results = document.getElementById('results');
+
+let video = document.createElement('video');
+video.playsInline = true; video.autoplay = true;
+let stream = null;
+let rafId = null;
+let whiteRef = null; // {r,g,b}
+let lastMeasurements = [];
+
+function startCamera(){
+  if(stream) return;
+  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(s => {
+      stream = s;
+      video.srcObject = s;
+      video.addEventListener('loadedmetadata', ()=>{
+        resizeCanvasToVideo();
+        video.play();
+        drawLoop();
+      });
+    })
+    .catch(err => alert('Error al abrir la cámara: ' + err.message));
+}
+
+function stopCamera(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+  }
+  if(rafId) cancelAnimationFrame(rafId);
+}
+
+function resizeCanvasToVideo(){
+  const vw = video.videoWidth || window.innerWidth;
+  const vh = video.videoHeight || Math.floor(window.innerHeight * 0.6);
+  // mantener aspecto razonable
+  canvas.width = vw;
+  canvas.height = vh;
+  canvas.style.width = '100%';
+}
+
+window.addEventListener('resize', ()=>{
+  if(video && video.videoWidth) resizeCanvasToVideo();
+});
+
+function drawLoop(){
+  if(!video) return;
+  if(video.readyState >= 2){
+    // escalar video al canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    drawOverlay();
+  }
+  rafId = requestAnimationFrame(drawLoop);
+}
+
+function drawOverlay(){
+  if(!showGridChk.checked) return;
+  const n = Math.max(1, parseInt(numBoxesInput.value)||8);
+  const boxW = Math.floor(canvas.width * 0.14);
+  const totalGaps = (n-1) * 8;
+  const availableH = canvas.height * 0.6; // zona central
+  const boxH = Math.floor((availableH - totalGaps) / n);
+  const startY = Math.floor(canvas.height * 0.18);
+  const cx = Math.floor(canvas.width / 2);
+  ctx.save();
+  ctx.lineWidth = 2;
+  for(let i=0;i<n;i++){
+    const x = cx - Math.floor(boxW/2);
+    const y = startY + i*(boxH + 8);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x,y,boxW,boxH);
+    ctx.strokeRect(x,y,boxW,boxH);
+    // small index number
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.font = '14px sans-serif';
+    ctx.fillText((i+1), x+6, y+18);
+  }
+  ctx.restore();
+}
+
+function getRects(){
+  const n = Math.max(1, parseInt(numBoxesInput.value)||8);
+  const boxW = Math.floor(canvas.width * 0.14);
+  const totalGaps = (n-1) * 8;
+  const availableH = canvas.height * 0.6;
+  const boxH = Math.floor((availableH - totalGaps) / n);
+  const startY = Math.floor(canvas.height * 0.18);
+  const cx = Math.floor(canvas.width / 2);
+  const rects = [];
+  for(let i=0;i<n;i++){
+    const x = cx - Math.floor(boxW/2);
+    const y = startY + i*(boxH + 8);
+    rects.push({x,y,w:boxW,h:boxH});
+  }
+  return rects;
+}
+
+function getAverageColor(x,y,w,h){
+  try{
+    const img = ctx.getImageData(x,y,w,h).data;
+    let r=0,g=0,b=0,c=0;
+    for(let i=0;i<img.length;i+=4){
+      r += img[i]; g += img[i+1]; b += img[i+2]; c++;
+    }
+    return {r: Math.round(r/c), g: Math.round(g/c), b: Math.round(b/c)};
+  }catch(e){
+    return {r:0,g:0,b:0};
+  }
+}
+
+function rgbToHex({r,g,b}){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+
+function applyWhiteCalibration(c){
+  if(!whiteRef) return c;
+  const scaleR = whiteRef.r ? (255/whiteRef.r) : 1;
+  const scaleG = whiteRef.g ? (255/whiteRef.g) : 1;
+  const scaleB = whiteRef.b ? (255/whiteRef.b) : 1;
+  const r = Math.min(255, Math.round(c.r * scaleR));
+  const g = Math.min(255, Math.round(c.g * scaleG));
+  const b = Math.min(255, Math.round(c.b * scaleB));
+  return {r,g,b};
+}
+
+function analyze(){
+  const rects = getRects();
+  lastMeasurements = [];
+  results.innerHTML = '';
+  rects.forEach((r,i)=>{
+    const avg = getAverageColor(r.x, r.y, r.w, r.h);
+    const calibrated = applyWhiteCalibration(avg);
+    lastMeasurements.push({index:i+1, raw:avg, calibrated});
+
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    sw.style.background = rgbToHex(calibrated);
+    sw.innerHTML = `<div style="height:34px;width:100%;border-radius:4px;border:1px solid rgba(0,0,0,0.08)"></div>
+      <div style="margin-top:6px">#${rgbToHex(calibrated).slice(1)}</div>
+      <div style="font-size:11px; color:#333">${calibrated.r}, ${calibrated.g}, ${calibrated.b}</div>
+      <div style="font-size:11px; color:#666">#${i+1}</div>`;
+    results.appendChild(sw);
+  });
+}
+
+function setWhiteReference(){
+  // toma una pequeña región central como referencia blanca
+  const size = Math.floor(Math.min(canvas.width, canvas.height) * 0.08);
+  const cx = Math.floor(canvas.width/2);
+  const cy = Math.floor(canvas.height/2);
+  const wr = getAverageColor(cx - Math.floor(size/2), cy - Math.floor(size/2), size, size);
+  whiteRef = wr;
+  alert('Referencia blanca guardada. RGB: ' + wr.r + ', ' + wr.g + ', ' + wr.b + '\nSe aplicará corrección al analizar.');
+}
+
+function downloadCSV(){
+  if(!lastMeasurements.length){ alert('Primero ejecutá Analizar para generar datos.'); return; }
+  let csv = 'index,hex,r,g,b\n';
+  lastMeasurements.forEach(m=>{
+    const h = rgbToHex(m.calibrated);
+    csv += `${m.index},${h},${m.calibrated.r},${m.calibrated.g},${m.calibrated.b}\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'mediciones_tira.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+startBtn.addEventListener('click', startCamera);
+analyzeBtn.addEventListener('click', analyze);
+setWhiteBtn.addEventListener('click', setWhiteReference);
+downloadBtn.addEventListener('click', downloadCSV);
+
+// stop camera when page is hidden
+window.addEventListener('pagehide', stopCamera);
+</script>
+</body>
+</html>
