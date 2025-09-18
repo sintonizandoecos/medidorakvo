@@ -1,275 +1,154 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Medidor de Tiras</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medidor de Nitrato</title>
   <style>
-    :root{
-      --bg: #fdfdfd;
-      --fg: #111;
-      --accent: #00796b;
-      --border: #ddd;
-      --soft: #f5f5f5;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
     }
-    body{
-      margin:0; padding:16px; background:var(--bg); color:var(--fg);
-      display:flex; flex-direction:column; align-items:center;
+    header {
+      background: #ffffff;
+      padding: 1rem;
+      width: 100%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
+      font-weight: bold;
     }
-    h1{
-      font-size:1.3rem; margin:0 0 12px; font-weight:600; color:var(--accent);
-      text-align:center;
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 600px;
+      padding: 1rem;
+      box-sizing: border-box;
     }
-    #controls{
-      display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
-      margin-bottom:12px;
-      width:100%;
+    video, canvas {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 1rem;
     }
-    #controls > *{
-      font-size:0.9rem;
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
-    button{
-      padding:8px 14px;
-      border-radius:8px;
-      border:1px solid var(--border);
-      background:var(--soft);
-      cursor:pointer;
-      transition: background 0.2s;
+    button {
+      padding: 0.8rem;
+      border: none;
+      border-radius: 6px;
+      background: #007bff;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
     }
-    button:hover{
-      background:#e0f2f1;
+    button:hover {
+      background: #0056b3;
     }
-    #numBoxes{
-      width:60px; padding:6px; border-radius:6px; border:1px solid var(--border);
+    .result {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
     }
-    #canvas{
-      width:100%; max-width:480px; height:auto; background:#000; border-radius:10px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.15);
-    }
-    #results{
-      margin-top:16px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;
-      width:100%;
-    }
-    .swatch{
-      flex:1 1 100px; max-width:120px;
-      padding:8px; border-radius:8px; text-align:center; font-size:0.8rem;
-      border:1px solid var(--border); background:white;
-      box-shadow:0 1px 4px rgba(0,0,0,0.05);
-    }
-    .swatch div:first-child{
-      height:40px; border-radius:6px; margin-bottom:6px;
-    }
-    .note{
-      font-size:0.8rem; color:#555; margin-top:8px; text-align:center;
-      max-width:480px;
-    }
-    label{display:flex; gap:6px; align-items:center}
-    @media (max-width:600px){
-      h1{font-size:1.1rem}
-      button{flex:1 1 45%}
-      .swatch{flex:1 1 45%; max-width:none}
+    .color-box {
+      width: 40px;
+      height: 40px;
+      display: inline-block;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      margin-top: 0.5rem;
     }
   </style>
 </head>
 <body>
-  <h1>Medidor de tiras</h1>
-  <div id="controls">
-    <label>Casillas:
-      <input id="numBoxes" type="number" min="1" max="12" value="8">
-    </label>
-    <button id="startBtn">Iniciar cámara</button>
-    <button id="setWhiteBtn">Referencia blanca</button>
-    <button id="analyzeBtn">Analizar</button>
-    <button id="downloadBtn">Descargar CSV</button>
-    <label><input type="checkbox" id="showGrid" checked> Guía</label>
-  </div>
+  <header>Medidor de Nitrato (NO₃⁻)</header>
+  <main>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" hidden></canvas>
+    <div class="controls">
+      <button id="start">Iniciar cámara</button>
+      <button id="analyze">Analizar color</button>
+    </div>
+    <div class="result" id="result">Resultado: aún no medido</div>
+  </main>
 
-  <canvas id="canvas"></canvas>
-  <div class="note">Usar luz blanca constante, difusor y mantener la cámara perpendicular a la tira.</div>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const resultDiv = document.getElementById('result');
 
-  <div id="results"></div>
+    const nitrateReference = [
+      { ppm: 0,   rgb: [252, 245, 240] },
+      { ppm: 20,  rgb: [246, 196, 206] },
+      { ppm: 40,  rgb: [237, 151, 178] },
+      { ppm: 80,  rgb: [228, 110, 150] },
+      { ppm: 160, rgb: [213, 60, 130] },
+      { ppm: 200, rgb: [200, 30, 120] }
+    ];
 
-<script>
-const startBtn = document.getElementById('startBtn');
-const analyzeBtn = document.getElementById('analyzeBtn');
-const setWhiteBtn = document.getElementById('setWhiteBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const numBoxesInput = document.getElementById('numBoxes');
-const showGridChk = document.getElementById('showGrid');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const results = document.getElementById('results');
+    document.getElementById('start').addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+      } catch (err) {
+        alert('Error al acceder a la cámara: ' + err);
+      }
+    });
 
-let video = document.createElement('video');
-video.playsInline = true; video.autoplay = true;
-let stream = null;
-let rafId = null;
-let whiteRef = null;
-let lastMeasurements = [];
+    document.getElementById('analyze').addEventListener('click', () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-function startCamera(){
-  if(stream) return;
-  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
-  navigator.mediaDevices.getUserMedia(constraints)
-    .then(s => {
-      stream = s;
-      video.srcObject = s;
-      video.addEventListener('loadedmetadata', ()=>{
-        resizeCanvasToVideo();
-        video.play();
-        drawLoop();
+      // Tomar un área central de la imagen como muestra
+      const sampleSize = 50;
+      const x = canvas.width / 2 - sampleSize / 2;
+      const y = canvas.height / 2 - sampleSize / 2;
+      const imageData = ctx.getImageData(x, y, sampleSize, sampleSize);
+
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        r += imageData.data[i];
+        g += imageData.data[i+1];
+        b += imageData.data[i+2];
+      }
+      const pixels = imageData.data.length / 4;
+      r = Math.round(r / pixels);
+      g = Math.round(g / pixels);
+      b = Math.round(b / pixels);
+
+      // Comparar con la referencia
+      let bestMatch = null;
+      let minDist = Infinity;
+      nitrateReference.forEach(ref => {
+        const dist = Math.sqrt(
+          Math.pow(r - ref.rgb[0], 2) +
+          Math.pow(g - ref.rgb[1], 2) +
+          Math.pow(b - ref.rgb[2], 2)
+        );
+        if (dist < minDist) {
+          minDist = dist;
+          bestMatch = ref;
+        }
       });
-    })
-    .catch(err => alert('Error al abrir la cámara: ' + err.message));
-}
 
-function stopCamera(){
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-    stream = null;
-  }
-  if(rafId) cancelAnimationFrame(rafId);
-}
-
-function resizeCanvasToVideo(){
-  const vw = video.videoWidth || window.innerWidth;
-  const vh = video.videoHeight || Math.floor(window.innerHeight * 0.6);
-  canvas.width = vw;
-  canvas.height = vh;
-  canvas.style.width = '100%';
-}
-
-window.addEventListener('resize', ()=>{
-  if(video && video.videoWidth) resizeCanvasToVideo();
-});
-
-function drawLoop(){
-  if(!video) return;
-  if(video.readyState >= 2){
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    drawOverlay();
-  }
-  rafId = requestAnimationFrame(drawLoop);
-}
-
-function drawOverlay(){
-  if(!showGridChk.checked) return;
-  const n = Math.max(1, parseInt(numBoxesInput.value)||8);
-  const boxW = Math.floor(canvas.width * 0.14);
-  const totalGaps = (n-1) * 8;
-  const availableH = canvas.height * 0.6;
-  const boxH = Math.floor((availableH - totalGaps) / n);
-  const startY = Math.floor(canvas.height * 0.18);
-  const cx = Math.floor(canvas.width / 2);
-  ctx.save();
-  ctx.lineWidth = 2;
-  for(let i=0;i<n;i++){
-    const x = cx - Math.floor(boxW/2);
-    const y = startY + i*(boxH + 8);
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(x,y,boxW,boxH);
-    ctx.strokeRect(x,y,boxW,boxH);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = '12px sans-serif';
-    ctx.fillText((i+1), x+6, y+16);
-  }
-  ctx.restore();
-}
-
-function getRects(){
-  const n = Math.max(1, parseInt(numBoxesInput.value)||8);
-  const boxW = Math.floor(canvas.width * 0.14);
-  const totalGaps = (n-1) * 8;
-  const availableH = canvas.height * 0.6;
-  const boxH = Math.floor((availableH - totalGaps) / n);
-  const startY = Math.floor(canvas.height * 0.18);
-  const cx = Math.floor(canvas.width / 2);
-  const rects = [];
-  for(let i=0;i<n;i++){
-    const x = cx - Math.floor(boxW/2);
-    const y = startY + i*(boxH + 8);
-    rects.push({x,y,w:boxW,h:boxH});
-  }
-  return rects;
-}
-
-function getAverageColor(x,y,w,h){
-  try{
-    const img = ctx.getImageData(x,y,w,h).data;
-    let r=0,g=0,b=0,c=0;
-    for(let i=0;i<img.length;i+=4){
-      r += img[i]; g += img[i+1]; b += img[i+2]; c++;
-    }
-    return {r: Math.round(r/c), g: Math.round(g/c), b: Math.round(b/c)};
-  }catch(e){
-    return {r:0,g:0,b:0};
-  }
-}
-
-function rgbToHex({r,g,b}){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-
-function applyWhiteCalibration(c){
-  if(!whiteRef) return c;
-  const scaleR = whiteRef.r ? (255/whiteRef.r) : 1;
-  const scaleG = whiteRef.g ? (255/whiteRef.g) : 1;
-  const scaleB = whiteRef.b ? (255/whiteRef.b) : 1;
-  return {
-    r: Math.min(255, Math.round(c.r * scaleR)),
-    g: Math.min(255, Math.round(c.g * scaleG)),
-    b: Math.min(255, Math.round(c.b * scaleB))
-  };
-}
-
-function analyze(){
-  const rects = getRects();
-  lastMeasurements = [];
-  results.innerHTML = '';
-  rects.forEach((r,i)=>{
-    const avg = getAverageColor(r.x, r.y, r.w, r.h);
-    const calibrated = applyWhiteCalibration(avg);
-    lastMeasurements.push({index:i+1, calibrated});
-
-    const sw = document.createElement('div');
-    sw.className = 'swatch';
-    sw.innerHTML = `<div style="background:${rgbToHex(calibrated)}"></div>
-      <div>${rgbToHex(calibrated)}</div>
-      <div>${calibrated.r}, ${calibrated.g}, ${calibrated.b}</div>
-      <div>#${i+1}</div>`;
-    results.appendChild(sw);
-  });
-}
-
-function setWhiteReference(){
-  const size = Math.floor(Math.min(canvas.width, canvas.height) * 0.08);
-  const cx = Math.floor(canvas.width/2);
-  const cy = Math.floor(canvas.height/2);
-  const wr = getAverageColor(cx - size/2, cy - size/2, size, size);
-  whiteRef = wr;
-  alert('Referencia blanca guardada: '+wr.r+','+wr.g+','+wr.b);
-}
-
-function downloadCSV(){
-  if(!lastMeasurements.length){ alert('Primero analizar.'); return; }
-  let csv = 'index,hex,r,g,b\n';
-  lastMeasurements.forEach(m=>{
-    const h = rgbToHex(m.calibrated);
-    csv += `${m.index},${h},${m.calibrated.r},${m.calibrated.g},${m.calibrated.b}\n`;
-  });
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'mediciones_tira.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-startBtn.addEventListener('click', startCamera);
-analyzeBtn.addEventListener('click', analyze);
-setWhiteBtn.addEventListener('click', setWhiteReference);
-downloadBtn.addEventListener('click', downloadCSV);
-window.addEventListener('pagehide', stopCamera);
-</script>
+      resultDiv.innerHTML = `
+        Resultado estimado: <b>${bestMatch.ppm} ppm</b><br>
+        Color detectado: <span class="color-box" style="background: rgb(${r},${g},${b})"></span>
+      `;
+    });
+  </script>
 </body>
 </html>
