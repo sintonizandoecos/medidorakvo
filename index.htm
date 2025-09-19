@@ -1,215 +1,306 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Medidor de Nitrato</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Medidor de Nitrato (mejorado)</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
+    :root{
+      --bg:#fbfdff; --panel:#ffffff; --accent:#00695c; --danger:#c62828; --muted:#666;
+      --card-shadow: 0 6px 18px rgba(10,20,30,0.06);
     }
-    h1 {
-      font-size: 6vw;
-      margin: 10px 0;
-      color: #222;
-      text-align: center;
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111}
+    .wrap{max-width:820px;margin:14px auto;padding:12px}
+    header{display:flex;align-items:center;gap:12px}
+    h1{margin:0;font-size:20px;color:var(--accent)}
+    .grid{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-top:12px}
+
+    /* Left: camera */
+    .camera-card{background:var(--panel);border-radius:12px;padding:10px;box-shadow:var(--card-shadow)}
+    .video-wrap{position:relative;border-radius:8px;overflow:hidden;background:#000}
+    video{width:100%;height:auto;display:block;transform-origin:center center}
+    #target{position:absolute;border:2px solid rgba(255,255,255,0.95);box-shadow:0 0 0 6px rgba(0,0,0,0.18) inset;border-radius:6px;pointer-events:none}
+
+    /* Right: controls */
+    .panel{background:var(--panel);padding:12px;border-radius:12px;box-shadow:var(--card-shadow)}
+    .btn{display:inline-block;padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin:6px 4px}
+    .btn.warn{background:#f57c00}
+    .btn.ghost{background:transparent;border:1px solid #ddd;color:#222}
+    .info{font-size:14px;color:var(--muted);margin-top:8px}
+
+    .result{margin-top:8px;padding:12px;border-radius:8px;background:#f8fffb;border:1px solid #e6f5ef}
+    .big{font-size:20px;font-weight:700}
+    .sub{font-size:13px;color:var(--muted)}
+    .swatch{width:56px;height:56px;border-radius:8px;border:1px solid #ccc;display:inline-block;vertical-align:middle;margin-right:8px}
+
+    @media (max-width:880px){
+      .grid{grid-template-columns:1fr;}
+      .panel{margin-top:10px}
     }
-    video {
-      border: 2px solid #333;
-      border-radius: 12px;
-      max-width: 95%;
-      height: auto;
-      transform-origin: center center;
-    }
-    canvas { display: none; }
-    #target {
-      position: absolute;
-      border: 2px dashed red;
-      pointer-events: none;
-    }
-    #colorBox {
-      width: 80px;
-      height: 80px;
-      border: 2px solid #333;
-      margin: 10px;
-    }
-    #result {
-      font-size: 5vw;
-      text-align: center;
-      margin: 10px;
-      color: #333;
-    }
-    button {
-      font-size: 5vw;
-      padding: 10px 20px;
-      margin: 10px;
-      border: none;
-      border-radius: 10px;
-      background: #0077cc;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover { background: #005fa3; }
-    @media (min-width: 768px) {
-      h1 { font-size: 2vw; }
-      #result { font-size: 1.2vw; }
-      button { font-size: 1.2vw; }
+
+    @media (max-width:420px){
+      h1{font-size:18px}
+      .btn{padding:12px 14px;font-size:16px}
+      .big{font-size:18px}
     }
   </style>
 </head>
 <body>
-  <h1>Medidor de Nitrato</h1>
-  <div style="position: relative; display: inline-block;">
-    <video id="video" autoplay playsinline></video>
-    <div id="target"></div>
-    <canvas id="canvas"></canvas>
+  <div class="wrap">
+    <header>
+      <h1>Medidor de Nitrato (NO₃⁻) — versión mejorada</h1>
+    </header>
+
+    <div class="grid">
+      <div class="camera-card">
+        <div class="video-wrap" id="videoWrap">
+          <video id="video" autoplay playsinline></video>
+          <div id="target"></div>
+        </div>
+        <div class="info">Guía: colocá la casilla de la tira dentro del recuadro. Usá Zoom si necesitás enfocar mejor.</div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="startBtn" class="btn">Iniciar cámara</button>
+          <button id="measureBtn" class="btn">Medir (capturar)</button>
+          <button id="calibrateBtn" class="btn ghost">Iniciar calibración</button>
+          <button id="resetCalBtn" class="btn ghost">Reset calibración</button>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button id="zoomIn" class="btn">Zoom +</button>
+          <button id="zoomOut" class="btn">Zoom -</button>
+          <button id="smallerTarget" class="btn ghost">Recuadro -</button>
+          <button id="largerTarget" class="btn ghost">Recuadro +</button>
+        </div>
+
+        <div class="result">
+          <div style="display:flex;align-items:center">
+            <div class="swatch" id="swatch"></div>
+            <div>
+              <div class="big" id="ppmText">Nitrato: — ppm</div>
+              <div class="sub" id="statusText">Estado: —</div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;font-size:13px">
+            <div id="rgbText">RGB: —</div>
+            <div id="hexText">HEX: —</div>
+            <div id="hslText">HSL: —</div>
+            <div id="uncertaintyText" style="margin-top:6px;color:var(--muted)"></div>
+          </div>
+        </div>
+
+        <div class="info" style="margin-top:10px">
+          <div><b>Calibración recomendada:</b> Para máxima precisión, presioná "Iniciar calibración" y capturá cada parche de la escala (0,20,40,80,160,200 ppm) uno por uno alineándolos con el recuadro. Los valores quedarán guardados en este navegador.</div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div id="colorBox"></div>
-  <div id="result">Esperando medición...</div>
-  <button id="measureBtn">Medir Color</button>
-  <button id="zoomIn">Zoom +</button>
-  <button id="zoomOut">Zoom -</button>
 
-  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const target = document.getElementById('target');
-    const result = document.getElementById('result');
-    const colorBox = document.getElementById('colorBox');
-    const measureBtn = document.getElementById('measureBtn');
-    let zoomLevel = 1;
+<script>
+// Mejoras: conversión a CIE-Lab, interpolación por ponderación por distancia (IDW), calibración por usuario.
 
-    // Colores de referencia (RGB aproximados) para cada nivel de Nitrato
-    const nitrateScale = [
-      { ppm: 0, rgb: [255, 245, 235], status: "Safe" },
-      { ppm: 20, rgb: [250, 210, 220], status: "Safe" },
-      { ppm: 40, rgb: [240, 160, 190], status: "Safe" },
-      { ppm: 80, rgb: [230, 120, 170], status: "Unsafe" },
-      { ppm: 160, rgb: [220, 70, 140], status: "Unsafe" },
-      { ppm: 200, rgb: [200, 40, 120], status: "Unsafe" }
-    ];
+const video = document.getElementById('video');
+const target = document.getElementById('target');
+const swatch = document.getElementById('swatch');
+const ppmText = document.getElementById('ppmText');
+const statusText = document.getElementById('statusText');
+const rgbText = document.getElementById('rgbText');
+const hexText = document.getElementById('hexText');
+const hslText = document.getElementById('hslText');
+const uncertaintyText = document.getElementById('uncertaintyText');
 
-    // Iniciar cámara
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(stream => { video.srcObject = stream; })
-      .catch(err => { alert("Error al acceder a la cámara: " + err); });
+const startBtn = document.getElementById('startBtn');
+const measureBtn = document.getElementById('measureBtn');
+const calibrateBtn = document.getElementById('calibrateBtn');
+const resetCalBtn = document.getElementById('resetCalBtn');
+const zoomIn = document.getElementById('zoomIn');
+const zoomOut = document.getElementById('zoomOut');
+const smallerTarget = document.getElementById('smallerTarget');
+const largerTarget = document.getElementById('largerTarget');
 
-    function rgbToHex(r, g, b) {
-      return "#" + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? "0" + hex : hex;
-      }).join("");
+let stream = null; let zoomLevel = 1; let rectPercent = 0.04; // 4% del ancho
+let calibrating = false; let calibIndex = 0;
+
+// Default reference scale (fallback). Estos RGB son aproximados y se reemplazan si calibrás.
+const defaultScale = [
+  {ppm:0, rgb:[255,245,235]},
+  {ppm:20, rgb:[250,210,220]},
+  {ppm:40, rgb:[240,160,190]},
+  {ppm:80, rgb:[230,120,170]},
+  {ppm:160, rgb:[220,70,140]},
+  {ppm:200, rgb:[200,40,120]}
+];
+const ppmList = defaultScale.map(s=>s.ppm);
+
+// cargar calibración guardada
+let calibratedScale = JSON.parse(localStorage.getItem('nitrate_calibration') || 'null');
+let activeScale = calibratedScale || defaultScale;
+
+function startCamera(){
+  if(stream) return;
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(s => { stream = s; video.srcObject = s; video.play(); positionTarget(); })
+    .catch(e => alert('No se pudo abrir la cámara: ' + e.message));
+}
+startBtn.addEventListener('click', startCamera);
+
+// ajustar target
+function positionTarget(){
+  const wrap = document.getElementById('video').parentElement;
+  const vw = wrap.clientWidth;
+  const rectSize = Math.max(24, Math.round(vw * rectPercent));
+  target.style.width = rectSize + 'px';
+  target.style.height = rectSize + 'px';
+  target.style.left = (wrap.offsetLeft + (wrap.clientWidth - rectSize)/2) + 'px';
+  target.style.top = (wrap.offsetTop + (wrap.clientHeight - rectSize)/2) + 'px';
+}
+window.addEventListener('resize', positionTarget);
+smallerTarget.addEventListener('click', ()=>{ rectPercent = Math.max(0.02, rectPercent - 0.01); positionTarget(); });
+largerTarget.addEventListener('click', ()=>{ rectPercent = Math.min(0.15, rectPercent + 0.01); positionTarget(); });
+
+zoomIn.addEventListener('click', ()=>{ zoomLevel = Math.min(3, zoomLevel + 0.2); video.style.transform = `scale(${zoomLevel})`; });
+zoomOut.addEventListener('click', ()=>{ zoomLevel = Math.max(1, zoomLevel - 0.2); video.style.transform = `scale(${zoomLevel})`; });
+
+// helpers: RGB <-> HEX, HSL
+function toHex(v){ const h = Math.round(v).toString(16); return h.length===1? '0'+h : h; }
+function rgbToHex(r,g,b){return '#'+toHex(r)+toHex(g)+toHex(b);} 
+function rgbToHsl(r,g,b){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s = l>0.5? d/(2-max-min) : d/(max+min); switch(max){case r: h=(g-b)/d + (g< b?6:0); break; case g: h=(b-r)/d+2; break; case b: h=(r-g)/d+4; break;} h/=6;} return [h*360,s*100,l*100]; }
+
+// Conversión sRGB -> CIEXYZ -> CIE Lab (D65)
+function srgbToLinear(c){ c /= 255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbToXyz(r,g,b){ const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b); // Observer = 2°, Illuminant = D65
+  const x = R*0.4124564 + G*0.3575761 + B*0.1804375;
+  const y = R*0.2126729 + G*0.7151522 + B*0.0721750;
+  const z = R*0.0193339 + G*0.1191920 + B*0.9503041;
+  return [x,y,z];
+}
+function xyzToLab(x,y,z){ const refX=0.95047, refY=1.00000, refZ=1.08883;
+  x/=refX; y/=refY; z/=refZ;
+  function f(t){ return t > 0.008856 ? Math.cbrt(t) : (7.787 * t) + 16/116; }
+  const fx=f(x), fy=f(y), fz=f(z);
+  const L = (116*fy) - 16;
+  const a = 500*(fx - fy);
+  const b = 200*(fy - fz);
+  return [L,a,b];
+}
+function rgbToLab(rgb){ const [x,y,z] = rgbToXyz(rgb[0], rgb[1], rgb[2]); return xyzToLab(x,y,z); }
+
+// Precompute Lab for active scale
+function scaleToLab(scale){ return scale.map(s => ({ppm:s.ppm, rgb:s.rgb, lab: rgbToLab(s.rgb)})); }
+let activeScaleLab = scaleToLab(activeScale);
+
+function colorDistanceLab(lab1, lab2){ const dl = lab1[0]-lab2[0], da=lab1[1]-lab2[1], db=lab1[2]-lab2[2]; return Math.sqrt(dl*dl + da*da + db*db); }
+
+// Measurement core: capture region inside target and compute weighted ppm using IDW in Lab
+function measureAndCompute(){
+  if(!stream){ alert('Iniciá la cámara primero.'); return; }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const rectSize = Math.max(10, Math.round(canvas.width * rectPercent));
+  const x = Math.round((canvas.width - rectSize) / 2);
+  const y = Math.round((canvas.height - rectSize) / 2);
+  const data = ctx.getImageData(x,y,rectSize,rectSize).data;
+
+  let r=0,g=0,b=0,count=0; // compute average excluding near-white pixels
+  for(let i=0;i<data.length;i+=4){ const R=data[i], G=data[i+1], B=data[i+2]; if(!(R>240 && G>240 && B>240)){ r+=R; g+=G; b+=B; count++; } }
+  if(count===0){ alert('No se detectó color válido dentro del recuadro. Asegurate de que la casilla cubra el área y que no haya reflejos.'); return null; }
+  const avg = [r/count, g/count, b/count];
+
+  // If we are calibrating, store this sample as the calibration for current ppm
+  if(calibrating){
+    if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+    calibratedScale[calibIndex].rgb = avg.map(v=>Math.round(v));
+    calibIndex++;
+    if(calibIndex >= calibratedScale.length){
+      calibrating = false;
+      localStorage.setItem('nitrate_calibration', JSON.stringify(calibratedScale));
+      activeScale = calibratedScale; activeScaleLab = scaleToLab(activeScale);
+      alert('Calibración completa. Valores guardados en este navegador.');
+    } else {
+      alert('Referencia capturada para ' + (calibratedScale[calibIndex-1].ppm) + ' ppm. Ahora colocá la siguiente: ' + calibratedScale[calibIndex].ppm + ' ppm.');
     }
+    return {avg, calibrated:true};
+  }
 
-    function rgbToHsl(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h, s, l = (max + min) / 2;
-      if (max === min) { h = s = 0; }
-      else {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch (max) {
-          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-          case g: h = (b - r) / d + 2; break;
-          case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-      }
-      return [h * 360, s * 100, l * 100];
-    }
+  // compute Lab
+  const measuredLab = rgbToLab(avg);
 
-    function colorDistance(c1, c2) {
-      return Math.sqrt(
-        Math.pow(c1[0] - c2[0], 2) +
-        Math.pow(c1[1] - c2[1], 2) +
-        Math.pow(c1[2] - c2[2], 2)
-      );
-    }
+  // compute distances to each ref in Lab
+  const dists = activeScaleLab.map(s => ({ppm:s.ppm, rgb:s.rgb, d: colorDistanceLab(measuredLab, s.lab)}));
 
-    function measureColor() {
-      const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  // IDW (power 2). small epsilon to avoid div0
+  const eps = 1e-6;
+  let wSum = 0, wpSum = 0;
+  dists.forEach(it => { const w = 1 / (Math.pow(it.d,2) + eps); wSum += w; wpSum += w * it.ppm; });
+  const ppmEst = wpSum / wSum;
 
-      const rectSize = canvas.width * 0.05; // recuadro más chico aún
-      const x = (canvas.width - rectSize) / 2;
-      const y = (canvas.height - rectSize) / 2;
+  // uncertainty: compute weighted std (std dev) of ppm
+  let varSum = 0;
+  dists.forEach(it => { const w = 1 / (Math.pow(it.d,2) + eps); varSum += w * Math.pow(it.ppm - ppmEst, 2); });
+  const ppmStd = Math.sqrt(Math.abs(varSum / wSum));
 
-      const imageData = ctx.getImageData(x, y, rectSize, rectSize);
-      const data = imageData.data;
+  return { avg, ppmEst, ppmStd, dists };
+}
 
-      let r = 0, g = 0, b = 0, count = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const red = data[i], green = data[i+1], blue = data[i+2];
-        if (!(red > 240 && green > 240 && blue > 240)) {
-          r += red; g += green; b += blue;
-          count++;
-        }
-      }
+measureBtn.addEventListener('click', ()=>{
+  const v = measureAndCompute();
+  if(!v) return;
+  if(v.calibrated) return; // was calibration capture
 
-      if (count === 0) {
-        result.textContent = "No se detectó color válido.";
-        return;
-      }
+  const [r,g,b] = v.avg;
+  const hex = rgbToHex(r,g,b);
+  const [h,s,l] = rgbToHsl(r,g,b);
 
-      r /= count; g /= count; b /= count;
-      const measured = [r, g, b];
+  // classification
+  const ppm = v.ppmEst;
+  let status = 'Safe';
+  if(ppm > 80) status = 'Unsafe'; else if(ppm > 40) status = 'Caution';
 
-      // Buscar valor más cercano en la escala
-      let bestMatch = nitrateScale[0];
-      let minDist = Infinity;
-      nitrateScale.forEach(ref => {
-        const dist = colorDistance(measured, ref.rgb);
-        if (dist < minDist) {
-          minDist = dist;
-          bestMatch = ref;
-        }
-      });
+  swatch.style.background = hex;
+  ppmText.textContent = 'Nitrato estimado: ' + ppm.toFixed(1) + ' ppm';
+  statusText.innerHTML = 'Estado: <b style="color:' + (status==='Unsafe'? 'var(--danger)' : status==='Caution' ? '#b8860b' : 'green') + '">' + status + '</b>';
+  rgbText.textContent = 'RGB: ' + r.toFixed(2) + ', ' + g.toFixed(2) + ', ' + b.toFixed(2);
+  hexText.textContent = 'HEX: ' + hex;
+  hslText.textContent = 'HSL: ' + h.toFixed(1) + '°, ' + s.toFixed(1) + '%, ' + l.toFixed(1) + '%';
+  uncertaintyText.textContent = 'Incertidumbre (1σ): ±' + v.ppmStd.toFixed(2) + ' ppm (basado en la dispersión ponderada)';
+});
 
-      const hex = rgbToHex(r, g, b);
-      const [h, s, l] = rgbToHsl(r, g, b);
+// Calibración
+calibrateBtn.addEventListener('click', ()=>{
+  if(!stream){ alert('Iniciá la cámara antes de calibrar.'); return; }
+  if(confirm('Vas a calibrar la escala. Tené a mano cada parche (0,20,40,80,160,200 ppm). Alineá primero el parche de 0 ppm en el recuadro y presioná OK para comenzar.')){
+    calibratedScale = JSON.parse(JSON.stringify(defaultScale)); // copy
+    calibrating = true; calibIndex = 0;
+    alert('Calibrando parche: ' + calibratedScale[calibIndex].ppm + ' ppm. Alineá y presioná "Medir (capturar)" para registrar.');
+  }
+});
 
-      colorBox.style.backgroundColor = hex;
-      result.innerHTML = `
-        <b>Nitrato estimado:</b> ${bestMatch.ppm} ppm<br>
-        Estado: <b style="color:${bestMatch.status==="Safe"?"green":"red"}">${bestMatch.status}</b><br><br>
-        RGB: (${r.toFixed(2)}, ${g.toFixed(2)}, ${b.toFixed(2)})<br>
-        HEX: ${hex}<br>
-        HSL: (${h.toFixed(1)}°, ${s.toFixed(1)}%, ${l.toFixed(1)}%)
-      `;
-    }
+resetCalBtn.addEventListener('click', ()=>{
+  if(confirm('Eliminar calibración guardada y volver a valores por defecto?')){
+    calibratedScale = null; localStorage.removeItem('nitrate_calibration'); activeScale = defaultScale; activeScaleLab = scaleToLab(activeScale);
+    alert('Calibración reseteada.');
+  }
+});
 
-    measureBtn.addEventListener('click', measureColor);
-    document.getElementById("zoomIn").addEventListener("click", () => {
-      zoomLevel += 0.2; video.style.transform = `scale(${zoomLevel})`;
-    });
-    document.getElementById("zoomOut").addEventListener("click", () => {
-      zoomLevel = Math.max(1, zoomLevel - 0.2);
-      video.style.transform = `scale(${zoomLevel})`;
-    });
+// load saved calibration on init
+if(localStorage.getItem('nitrate_calibration')){
+  calibratedScale = JSON.parse(localStorage.getItem('nitrate_calibration'));
+  activeScale = calibratedScale; activeScaleLab = scaleToLab(activeScale);
+}
 
-    // Dibujar recuadro
-    video.addEventListener('loadedmetadata', () => {
-      function updateTarget() {
-        const rectSize = video.offsetWidth * 0.1;
-        target.style.width = rectSize + "px";
-        target.style.height = rectSize + "px";
-        target.style.left = (video.offsetLeft + (video.offsetWidth - rectSize) / 2) + "px";
-        target.style.top = (video.offsetTop + (video.offsetHeight - rectSize) / 2) + "px";
-      }
-      updateTarget();
-      window.addEventListener('resize', updateTarget);
-    });
-  </script>
+// position target after video appears
+video.addEventListener('loadedmetadata', ()=>{ positionTarget(); });
+
+// helper to convert rgb to hex using rounded values
+function rgbToHex(r,g,b){ return '#'+[Math.round(r),Math.round(g),Math.round(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+
+</script>
 </body>
 </html>
