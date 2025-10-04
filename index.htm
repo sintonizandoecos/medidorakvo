@@ -127,12 +127,12 @@ let calibrating = false; let calibIndex = 0;
 
 // Default reference scale (fallback). Estos RGB son aproximados y se reemplazan si calibrás.
 const defaultScale = [
-  {ppm:0, rgb:[255,245,235]},
-  {ppm:20, rgb:[250,210,220]},
-  {ppm:40, rgb:[240,160,190]},
-  {ppm:80, rgb:[230,120,170]},
-  {ppm:160, rgb:[220,70,140]},
-  {ppm:200, rgb:[200,40,120]}
+  {ppm:0,   rgb:[255, 250, 240]}, // casi blanco / amarillo pálido
+  {ppm:20,  rgb:[250, 210, 220]}, // rosa muy claro
+  {ppm:40,  rgb:[245, 170, 190]}, // rosa claro
+  {ppm:80,  rgb:[235, 120, 170]}, // rosa medio
+  {ppm:160, rgb:[225, 70, 140]},  // fucsia fuerte
+  {ppm:200, rgb:[210, 40, 120]}   // magenta intenso
 ];
 const ppmList = defaultScale.map(s=>s.ppm);
 
