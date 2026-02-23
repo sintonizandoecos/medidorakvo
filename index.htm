@@ -2,305 +2,301 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Medidor de Nitrato (mejorado)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Medidor de Nitrato (Pro)</title>
   <style>
-    :root{
-      --bg:#fbfdff; --panel:#ffffff; --accent:#00695c; --danger:#c62828; --muted:#666;
-      --card-shadow: 0 6px 18px rgba(10,20,30,0.06);
+    :root {
+      --bg: #f3f4f6;
+      --surface: #ffffff;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --safe: #10b981;
+      --unsafe: #ef4444;
+      --shadow: 0 4px 20px rgba(0,0,0,0.05);
+      --radius: 16px;
     }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111}
-    .wrap{max-width:820px;margin:14px auto;padding:12px}
-    header{display:flex;align-items:center;gap:12px}
-    h1{margin:0;font-size:20px;color:var(--accent)}
-    .grid{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-top:12px}
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text-main); padding: 16px; }
+    
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    
+    header { text-align: center; padding: 10px 0; }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px; }
+    p.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
 
-    /* Left: camera */
-    .camera-card{background:var(--panel);border-radius:12px;padding:10px;box-shadow:var(--card-shadow)}
-    .video-wrap{position:relative;border-radius:8px;overflow:hidden;background:#000}
-    video{width:100%;height:auto;display:block;transform-origin:center center}
-    #target{position:absolute;border:2px solid rgba(255,255,255,0.95);box-shadow:0 0 0 6px rgba(0,0,0,0.18) inset;border-radius:6px;pointer-events:none}
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 768px) { .grid { grid-template-columns: 1fr 320px; } }
 
-    /* Right: controls */
-    .panel{background:var(--panel);padding:12px;border-radius:12px;box-shadow:var(--card-shadow)}
-    .btn{display:inline-block;padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin:6px 4px}
-    .btn.warn{background:#f57c00}
-    .btn.ghost{background:transparent;border:1px solid #ddd;color:#222}
-    .info{font-size:14px;color:var(--muted);margin-top:8px}
+    .card { background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
 
-    .result{margin-top:8px;padding:12px;border-radius:8px;background:#f8fffb;border:1px solid #e6f5ef}
-    .big{font-size:20px;font-weight:700}
-    .sub{font-size:13px;color:var(--muted)}
-    .swatch{width:56px;height:56px;border-radius:8px;border:1px solid #ccc;display:inline-block;vertical-align:middle;margin-right:8px}
-
-    @media (max-width:880px){
-      .grid{grid-template-columns:1fr;}
-      .panel{margin-top:10px}
+    /* Camera Section */
+    .video-container { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; transform-origin: center center; transition: transform 0.2s; }
+    
+    /* Target Box UI */
+    #target {
+      position: absolute; pointer-events: none; border: 2px solid #fff;
+      box-shadow: 0 0 0 4000px rgba(0,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.3); /* Darkens everything outside */
+      border-radius: 8px; transition: all 0.2s;
     }
+    #target::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 4px; background: red; border-radius: 50%; } /* Center dot */
 
-    @media (max-width:420px){
-      h1{font-size:18px}
-      .btn{padding:12px 14px;font-size:16px}
-      .big{font-size:18px}
+    /* Controls */
+    .control-group { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn { 
+      flex: 1; min-width: 120px; padding: 12px; border-radius: 10px; border: none; 
+      background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; 
+      cursor: pointer; transition: background 0.2s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 6px;
     }
+    .btn:active { transform: scale(0.98); }
+    .btn:hover { background: var(--primary-hover); }
+    .btn.secondary { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--bg); }
+    .btn.small { min-width: auto; padding: 8px 12px; font-size: 13px; }
+
+    /* Results */
+    .result-box { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .color-swatch { width: 60px; height: 60px; border-radius: 12px; background: #eee; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; transition: background 0.3s; }
+    .result-data h2 { margin: 0; font-size: 28px; font-weight: 800; }
+    .result-data .status { font-size: 14px; font-weight: 600; margin-top: 4px; display: inline-block; padding: 4px 8px; border-radius: 6px; }
+    
+    .status.safe { background: rgba(16, 185, 129, 0.1); color: var(--safe); }
+    .status.unsafe { background: rgba(239, 68, 68, 0.1); color: var(--unsafe); }
+    .status.neutral { background: var(--bg); color: var(--text-muted); }
+
+    .tech-details { margin-top: 16px; font-size: 12px; color: var(--text-muted); background: var(--bg); padding: 12px; border-radius: 8px; font-family: monospace; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Medidor de Nitrato (NO₃⁻) — versión mejorada</h1>
-    </header>
 
-    <div class="grid">
-      <div class="camera-card">
-        <div class="video-wrap" id="videoWrap">
-          <video id="video" autoplay playsinline></video>
-          <div id="target"></div>
-        </div>
-        <div class="info">Guía: colocá la casilla de la tira dentro del recuadro. Usá Zoom si necesitás enfocar mejor.</div>
+<div class="container">
+  <header>
+    <h1>Medidor de Nitrato (NO₃⁻)</h1>
+    <p class="subtitle">Alineá el parche en el recuadro para leer el valor</p>
+  </header>
+
+  <div class="grid">
+    <div class="card" style="padding: 8px;">
+      <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="target"></div>
+      </div>
+      <div class="control-group" style="margin-top: 12px; padding: 0 8px;">
+        <button id="zoomOut" class="btn secondary small">Zoom -</button>
+        <button id="zoomIn" class="btn secondary small">Zoom +</button>
+        <button id="targetDown" class="btn secondary small">Caja -</button>
+        <button id="targetUp" class="btn secondary small">Caja +</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="control-group">
+        <button id="startBtn" class="btn">📸 Encender Cámara</button>
+        <button id="measureBtn" class="btn">🧪 Medir Parche</button>
+      </div>
+      
+      <div class="control-group">
+        <button id="calibrateBtn" class="btn secondary">⚙️ Calibrar Escala</button>
+        <button id="resetBtn" class="btn secondary">♻️ Reset</button>
       </div>
 
-      <div class="panel">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="startBtn" class="btn">Iniciar cámara</button>
-          <button id="measureBtn" class="btn">Medir (capturar)</button>
-          <button id="calibrateBtn" class="btn ghost">Iniciar calibración</button>
-          <button id="resetCalBtn" class="btn ghost">Reset calibración</button>
+      <div class="result-box">
+        <div class="color-swatch" id="swatch"></div>
+        <div class="result-data">
+          <h2 id="ppmText">-- ppm</h2>
+          <div id="statusLabel" class="status neutral">Esperando lectura...</div>
         </div>
+      </div>
 
-        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button id="zoomIn" class="btn">Zoom +</button>
-          <button id="zoomOut" class="btn">Zoom -</button>
-          <button id="smallerTarget" class="btn ghost">Recuadro -</button>
-          <button id="largerTarget" class="btn ghost">Recuadro +</button>
-        </div>
-
-        <div class="result">
-          <div style="display:flex;align-items:center">
-            <div class="swatch" id="swatch"></div>
-            <div>
-              <div class="big" id="ppmText">Nitrato: — ppm</div>
-              <div class="sub" id="statusText">Estado: —</div>
-            </div>
-          </div>
-
-          <div style="margin-top:10px;font-size:13px">
-            <div id="rgbText">RGB: —</div>
-            <div id="hexText">HEX: —</div>
-            <div id="hslText">HSL: —</div>
-            <div id="uncertaintyText" style="margin-top:6px;color:var(--muted)"></div>
-          </div>
-        </div>
-
-        <div class="info" style="margin-top:10px">
-          <div><b>Calibración recomendada:</b> Para máxima precisión, presioná "Iniciar calibración" y capturá cada parche de la escala (0,20,40,80,160,200 ppm) uno por uno alineándolos con el recuadro. Los valores quedarán guardados en este navegador.</div>
-        </div>
+      <div class="tech-details">
+        <div id="rgbText">RGB: --, --, --</div>
+        <div id="hexText">HEX: #------</div>
+        <div id="distText">Distancia al perfil (ΔE): --</div>
       </div>
     </div>
   </div>
+</div>
 
 <script>
-// Mejoras: conversión a CIE-Lab, interpolación por ponderación por distancia (IDW), calibración por usuario.
-
 const video = document.getElementById('video');
 const target = document.getElementById('target');
 const swatch = document.getElementById('swatch');
 const ppmText = document.getElementById('ppmText');
-const statusText = document.getElementById('statusText');
-const rgbText = document.getElementById('rgbText');
-const hexText = document.getElementById('hexText');
-const hslText = document.getElementById('hslText');
-const uncertaintyText = document.getElementById('uncertaintyText');
-
-const startBtn = document.getElementById('startBtn');
-const measureBtn = document.getElementById('measureBtn');
-const calibrateBtn = document.getElementById('calibrateBtn');
-const resetCalBtn = document.getElementById('resetCalBtn');
-const zoomIn = document.getElementById('zoomIn');
-const zoomOut = document.getElementById('zoomOut');
-const smallerTarget = document.getElementById('smallerTarget');
-const largerTarget = document.getElementById('largerTarget');
-
-let stream = null; let zoomLevel = 1; let rectPercent = 0.04; // 4% del ancho
+const statusLabel = document.getElementById('statusLabel');
+let stream = null; let zoomLevel = 1; let rectPercent = 0.15; // 15% del contenedor
 let calibrating = false; let calibIndex = 0;
 
-// Default reference scale (fallback). Estos RGB son aproximados y se reemplazan si calibrás.
+// Colores extraídos de la imagen de referencia (Freshwater Comparison Chart)
 const defaultScale = [
-  {ppm:0,   rgb:[255, 250, 240]}, // casi blanco / amarillo pálido
-  {ppm:20,  rgb:[250, 210, 220]}, // rosa muy claro
-  {ppm:40,  rgb:[245, 170, 190]}, // rosa claro
-  {ppm:80,  rgb:[235, 120, 170]}, // rosa medio
-  {ppm:160, rgb:[225, 70, 140]},  // fucsia fuerte
-  {ppm:200, rgb:[210, 40, 120]}   // magenta intenso
+  {ppm:0,   rgb:[252, 244, 205]}, // Safe - Amarillo pálido
+  {ppm:20,  rgb:[240, 163, 194]}, // Safe - Rosa claro
+  {ppm:40,  rgb:[232, 123, 166]}, // Safe - Rosa medio
+  {ppm:80,  rgb:[213, 61,  134]}, // Unsafe - Rosa oscuro
+  {ppm:160, rgb:[232, 25,  118]}, // Unsafe - Magenta brillante
+  {ppm:200, rgb:[211, 12,  89]}   // Unsafe - Rojo/Magenta profundo
 ];
-const ppmList = defaultScale.map(s=>s.ppm);
 
-// cargar calibración guardada
-let calibratedScale = JSON.parse(localStorage.getItem('nitrate_calibration') || 'null');
+let calibratedScale = JSON.parse(localStorage.getItem('no3_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
-function startCamera(){
+// Iniciar cámara
+document.getElementById('startBtn').addEventListener('click', () => {
   if(stream) return;
   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
     .then(s => { stream = s; video.srcObject = s; video.play(); positionTarget(); })
-    .catch(e => alert('No se pudo abrir la cámara: ' + e.message));
-}
-startBtn.addEventListener('click', startCamera);
+    .catch(e => alert('Error cámara: ' + e.message));
+});
 
-// ajustar target
-function positionTarget(){
-  const wrap = document.getElementById('video').parentElement;
-  const vw = wrap.clientWidth;
-  const rectSize = Math.max(24, Math.round(vw * rectPercent));
-  target.style.width = rectSize + 'px';
-  target.style.height = rectSize + 'px';
-  target.style.left = (wrap.offsetLeft + (wrap.clientWidth - rectSize)/2) + 'px';
-  target.style.top = (wrap.offsetTop + (wrap.clientHeight - rectSize)/2) + 'px';
+// UI Ajustes de cámara
+function positionTarget() {
+  const container = video.parentElement;
+  const size = Math.round(container.clientWidth * rectPercent);
+  target.style.width = size + 'px';
+  target.style.height = size + 'px';
+  target.style.left = (container.clientWidth - size) / 2 + 'px';
+  target.style.top = (container.clientHeight - size) / 2 + 'px';
 }
 window.addEventListener('resize', positionTarget);
-smallerTarget.addEventListener('click', ()=>{ rectPercent = Math.max(0.02, rectPercent - 0.01); positionTarget(); });
-largerTarget.addEventListener('click', ()=>{ rectPercent = Math.min(0.15, rectPercent + 0.01); positionTarget(); });
+video.addEventListener('loadedmetadata', positionTarget);
 
-zoomIn.addEventListener('click', ()=>{ zoomLevel = Math.min(3, zoomLevel + 0.2); video.style.transform = `scale(${zoomLevel})`; });
-zoomOut.addEventListener('click', ()=>{ zoomLevel = Math.max(1, zoomLevel - 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('zoomIn').addEventListener('click', () => { zoomLevel = Math.min(3, zoomLevel + 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel = Math.max(1, zoomLevel - 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('targetUp').addEventListener('click', () => { rectPercent = Math.min(0.4, rectPercent + 0.05); positionTarget(); });
+document.getElementById('targetDown').addEventListener('click', () => { rectPercent = Math.max(0.05, rectPercent - 0.05); positionTarget(); });
 
-// helpers: RGB <-> HEX, HSL
-function toHex(v){ const h = Math.round(v).toString(16); return h.length===1? '0'+h : h; }
-function rgbToHex(r,g,b){return '#'+toHex(r)+toHex(g)+toHex(b);} 
-function rgbToHsl(r,g,b){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s = l>0.5? d/(2-max-min) : d/(max+min); switch(max){case r: h=(g-b)/d + (g< b?6:0); break; case g: h=(b-r)/d+2; break; case b: h=(r-g)/d+4; break;} h/=6;} return [h*360,s*100,l*100]; }
-
-// Conversión sRGB -> CIEXYZ -> CIE Lab (D65)
-function srgbToLinear(c){ c /= 255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
-function rgbToXyz(r,g,b){ const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b); // Observer = 2°, Illuminant = D65
-  const x = R*0.4124564 + G*0.3575761 + B*0.1804375;
-  const y = R*0.2126729 + G*0.7151522 + B*0.0721750;
-  const z = R*0.0193339 + G*0.1191920 + B*0.9503041;
-  return [x,y,z];
+// Matemáticas de Color (sRGB a CIE-Lab)
+function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbToLab(r, g, b) {
+  const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+  let x = (R*0.4124564 + G*0.3575761 + B*0.1804375) / 0.95047;
+  let y = (R*0.2126729 + G*0.7151522 + B*0.0721750) / 1.00000;
+  let z = (R*0.0193339 + G*0.1191920 + B*0.9503041) / 1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
+  return [(116*f(y)) - 16, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
 }
-function xyzToLab(x,y,z){ const refX=0.95047, refY=1.00000, refZ=1.08883;
-  x/=refX; y/=refY; z/=refZ;
-  function f(t){ return t > 0.008856 ? Math.cbrt(t) : (7.787 * t) + 16/116; }
-  const fx=f(x), fy=f(y), fz=f(z);
-  const L = (116*fy) - 16;
-  const a = 500*(fx - fy);
-  const b = 200*(fy - fz);
-  return [L,a,b];
-}
-function rgbToLab(rgb){ const [x,y,z] = rgbToXyz(rgb[0], rgb[1], rgb[2]); return xyzToLab(x,y,z); }
+function rgbToHex(r,g,b) { return '#'+[r,g,b].map(x=>Math.round(x).toString(16).padStart(2,'0')).join(''); }
 
-// Precompute Lab for active scale
-function scaleToLab(scale){ return scale.map(s => ({ppm:s.ppm, rgb:s.rgb, lab: rgbToLab(s.rgb)})); }
-let activeScaleLab = scaleToLab(activeScale);
+function getActiveLabScale() { return activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) })); }
 
-function colorDistanceLab(lab1, lab2){ const dl = lab1[0]-lab2[0], da=lab1[1]-lab2[1], db=lab1[2]-lab2[2]; return Math.sqrt(dl*dl + da*da + db*db); }
-
-// Measurement core: capture region inside target and compute weighted ppm using IDW in Lab
-function measureAndCompute(){
-  if(!stream){ alert('Iniciá la cámara primero.'); return; }
+// Lógica principal: Proyección en segmentos (Reemplaza al IDW)
+function measureAndCompute() {
+  if(!stream) { alert('Encendé la cámara primero.'); return null; }
+  
+  // Capturar frame
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
   canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d');
+  
+  // Compensar el zoom para extraer el área correcta
+  const scale = canvas.width / video.clientWidth;
+  const rectSize = target.clientWidth * scale / zoomLevel;
+  
+  // Dibujar video respetando el zoom (centrado)
+  const zWidth = canvas.width / zoomLevel;
+  const zHeight = canvas.height / zoomLevel;
+  const zX = (canvas.width - zWidth) / 2;
+  const zY = (canvas.height - zHeight) / 2;
+  ctx.drawImage(video, zX, zY, zWidth, zHeight, 0, 0, canvas.width, canvas.height);
 
-  const rectSize = Math.max(10, Math.round(canvas.width * rectPercent));
-  const x = Math.round((canvas.width - rectSize) / 2);
-  const y = Math.round((canvas.height - rectSize) / 2);
-  const data = ctx.getImageData(x,y,rectSize,rectSize).data;
+  const cx = (canvas.width - rectSize)/2;
+  const cy = (canvas.height - rectSize)/2;
+  const data = ctx.getImageData(cx, cy, rectSize, rectSize).data;
 
-  let r=0,g=0,b=0,count=0; // compute average excluding near-white pixels
-  for(let i=0;i<data.length;i+=4){ const R=data[i], G=data[i+1], B=data[i+2]; if(!(R>240 && G>240 && B>240)){ r+=R; g+=G; b+=B; count++; } }
-  if(count===0){ alert('No se detectó color válido dentro del recuadro. Asegurate de que la casilla cubra el área y que no haya reflejos.'); return null; }
+  // Promedio (Se quitó el filtro erróneo que bloqueaba el blanco/amarillo)
+  let r=0, g=0, b=0, count=0;
+  for(let i=0; i<data.length; i+=4) { r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
   const avg = [r/count, g/count, b/count];
+  
+  if(calibrating) return handleCalibration(avg);
 
-  // If we are calibrating, store this sample as the calibration for current ppm
-  if(calibrating){
-    if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
-    calibratedScale[calibIndex].rgb = avg.map(v=>Math.round(v));
-    calibIndex++;
-    if(calibIndex >= calibratedScale.length){
-      calibrating = false;
-      localStorage.setItem('nitrate_calibration', JSON.stringify(calibratedScale));
-      activeScale = calibratedScale; activeScaleLab = scaleToLab(activeScale);
-      alert('Calibración completa. Valores guardados en este navegador.');
-    } else {
-      alert('Referencia capturada para ' + (calibratedScale[calibIndex-1].ppm) + ' ppm. Ahora colocá la siguiente: ' + calibratedScale[calibIndex].ppm + ' ppm.');
+  // Proyección
+  const pLab = rgbToLab(...avg);
+  const scaleLab = getActiveLabScale();
+  
+  let bestDist = Infinity;
+  let bestPpm = 0;
+
+  // Iterar por cada tramo de la escala (0-20, 20-40, etc.)
+  for(let i=0; i < scaleLab.length - 1; i++) {
+    const A = scaleLab[i]; const B = scaleLab[i+1];
+    const AB = [B.lab[0]-A.lab[0], B.lab[1]-A.lab[1], B.lab[2]-A.lab[2]];
+    const AP = [pLab[0]-A.lab[0], pLab[1]-A.lab[1], pLab[2]-A.lab[2]];
+    
+    const dotAP_AB = AP[0]*AB[0] + AP[1]*AB[1] + AP[2]*AB[2];
+    const dotAB_AB = AB[0]*AB[0] + AB[1]*AB[1] + AB[2]*AB[2];
+    
+    // Calcular porcentaje de recorrido en el segmento (limitado a 0-1)
+    let t = dotAB_AB === 0 ? 0 : dotAP_AB / dotAB_AB;
+    t = Math.max(0, Math.min(1, t)); 
+    
+    // Calcular punto proyectado en la línea
+    const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
+    
+    // Distancia del color medido a la línea ideal
+    const dist = Math.sqrt(Math.pow(pLab[0]-Proj[0], 2) + Math.pow(pLab[1]-Proj[1], 2) + Math.pow(pLab[2]-Proj[2], 2));
+    
+    if(dist < bestDist) {
+      bestDist = dist;
+      bestPpm = A.ppm + t * (B.ppm - A.ppm);
     }
-    return {avg, calibrated:true};
   }
 
-  // compute Lab
-  const measuredLab = rgbToLab(avg);
-
-  // compute distances to each ref in Lab
-  const dists = activeScaleLab.map(s => ({ppm:s.ppm, rgb:s.rgb, d: colorDistanceLab(measuredLab, s.lab)}));
-
-  // IDW (power 2). small epsilon to avoid div0
-  const eps = 1e-6;
-  let wSum = 0, wpSum = 0;
-  dists.forEach(it => { const w = 1 / (Math.pow(it.d,2) + eps); wSum += w; wpSum += w * it.ppm; });
-  const ppmEst = wpSum / wSum;
-
-  // uncertainty: compute weighted std (std dev) of ppm
-  let varSum = 0;
-  dists.forEach(it => { const w = 1 / (Math.pow(it.d,2) + eps); varSum += w * Math.pow(it.ppm - ppmEst, 2); });
-  const ppmStd = Math.sqrt(Math.abs(varSum / wSum));
-
-  return { avg, ppmEst, ppmStd, dists };
+  return { avg, ppm: bestPpm, errorDist: bestDist };
 }
 
-measureBtn.addEventListener('click', ()=>{
-  const v = measureAndCompute();
-  if(!v) return;
-  if(v.calibrated) return; // was calibration capture
-
-  const [r,g,b] = v.avg;
-  const hex = rgbToHex(r,g,b);
-  const [h,s,l] = rgbToHsl(r,g,b);
-
-  // classification
-  const ppm = v.ppmEst;
-  let status = 'Safe';
-  if(ppm > 80) status = 'Unsafe'; else if(ppm > 40) status = 'Caution';
-
-  swatch.style.background = hex;
-  ppmText.textContent = 'Nitrato estimado: ' + ppm.toFixed(1) + ' ppm';
-  statusText.innerHTML = 'Estado: <b style="color:' + (status==='Unsafe'? 'var(--danger)' : status==='Caution' ? '#b8860b' : 'green') + '">' + status + '</b>';
-  rgbText.textContent = 'RGB: ' + r.toFixed(2) + ', ' + g.toFixed(2) + ', ' + b.toFixed(2);
-  hexText.textContent = 'HEX: ' + hex;
-  hslText.textContent = 'HSL: ' + h.toFixed(1) + '°, ' + s.toFixed(1) + '%, ' + l.toFixed(1) + '%';
-  uncertaintyText.textContent = 'Incertidumbre (1σ): ±' + v.ppmStd.toFixed(2) + ' ppm (basado en la dispersión ponderada)';
+document.getElementById('measureBtn').addEventListener('click', () => {
+  const result = measureAndCompute();
+  if(!result) return;
+  
+  const [r,g,b] = result.avg;
+  swatch.style.background = rgbToHex(r,g,b);
+  ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
+  
+  // La imagen marca que hasta 40 es Safe y desde 80 es Unsafe
+  const isSafe = result.ppm < 60; // Punto de inflexión entre 40 y 80
+  statusLabel.textContent = isSafe ? 'Nivel Seguro' : 'Nivel Peligroso';
+  statusLabel.className = 'status ' + (isSafe ? 'safe' : 'unsafe');
+  
+  document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
+  document.getElementById('hexText').textContent = `HEX: ${rgbToHex(r,g,b)}`;
+  document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)} (menor es más preciso)`;
 });
 
-// Calibración
-calibrateBtn.addEventListener('click', ()=>{
-  if(!stream){ alert('Iniciá la cámara antes de calibrar.'); return; }
-  if(confirm('Vas a calibrar la escala. Tené a mano cada parche (0,20,40,80,160,200 ppm). Alineá primero el parche de 0 ppm en el recuadro y presioná OK para comenzar.')){
-    calibratedScale = JSON.parse(JSON.stringify(defaultScale)); // copy
-    calibrating = true; calibIndex = 0;
-    alert('Calibrando parche: ' + calibratedScale[calibIndex].ppm + ' ppm. Alineá y presioná "Medir (capturar)" para registrar.');
+// Sistema de Calibración
+function handleCalibration(avg) {
+  if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+  calibratedScale[calibIndex].rgb = avg.map(Math.round);
+  calibIndex++;
+  
+  if(calibIndex >= calibratedScale.length) {
+    calibrating = false;
+    localStorage.setItem('no3_calibration', JSON.stringify(calibratedScale));
+    activeScale = calibratedScale;
+    alert('✅ Calibración guardada exitosamente.');
+    document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
+  } else {
+    alert(`Paso ${calibIndex+1}: Enfocá el parche de ${calibratedScale[calibIndex].ppm} ppm y presioná Medir.`);
   }
-});
-
-resetCalBtn.addEventListener('click', ()=>{
-  if(confirm('Eliminar calibración guardada y volver a valores por defecto?')){
-    calibratedScale = null; localStorage.removeItem('nitrate_calibration'); activeScale = defaultScale; activeScaleLab = scaleToLab(activeScale);
-    alert('Calibración reseteada.');
-  }
-});
-
-// load saved calibration on init
-if(localStorage.getItem('nitrate_calibration')){
-  calibratedScale = JSON.parse(localStorage.getItem('nitrate_calibration'));
-  activeScale = calibratedScale; activeScaleLab = scaleToLab(activeScale);
+  return null;
 }
 
-// position target after video appears
-video.addEventListener('loadedmetadata', ()=>{ positionTarget(); });
+document.getElementById('calibrateBtn').addEventListener('click', () => {
+  if(!stream) { alert('Encendé la cámara primero.'); return; }
+  calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+  calibrating = true; calibIndex = 0;
+  document.getElementById('calibrateBtn').textContent = 'Cancel Calibración';
+  alert(`Iniciando calibración. Enfocá el parche de ${calibratedScale[0].ppm} ppm y presioná "Medir Parche".`);
+});
 
-// helper to convert rgb to hex using rounded values
-function rgbToHex(r,g,b){ return '#'+[Math.round(r),Math.round(g),Math.round(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-
+document.getElementById('resetBtn').addEventListener('click', () => {
+  localStorage.removeItem('no3_calibration');
+  activeScale = defaultScale; calibratedScale = null; calibrating = false;
+  document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
+  alert('Valores de fábrica restaurados.');
+});
 </script>
 </body>
 </html>
