@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Medidor de Alcalinidad Total (KH)</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --surface: #ffffff;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --ideal: #10b981; /* Verde para el nivel ideal */
+      --danger: #ef4444; /* Rojo para niveles bajos/altos */
+      --shadow: 0 4px 20px rgba(0,0,0,0.05);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text-main); padding: 16px; }
+    
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    
+    header { text-align: center; padding: 10px 0; }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px; }
+    p.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 768px) { .grid { grid-template-columns: 1fr 320px; } }
+
+    .card { background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+
+    /* Camera Section */
+    .video-container { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; transform-origin: center center; transition: transform 0.2s; }
+    
+    /* Target Box UI */
+    #target {
+      position: absolute; pointer-events: none; border: 2px solid #fff;
+      box-shadow: 0 0 0 4000px rgba(0,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.3); /* Darkens everything outside */
+      border-radius: 8px; transition: all 0.2s;
+    }
+    #target::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 4px; background: red; border-radius: 50%; } /* Center dot */
+
+    /* Controls */
+    .control-group { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn { 
+      flex: 1; min-width: 120px; padding: 12px; border-radius: 10px; border: none; 
+      background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; 
+      cursor: pointer; transition: background 0.2s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:hover { background: var(--primary-hover); }
+    .btn.secondary { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--bg); }
+    .btn.small { min-width: auto; padding: 8px 12px; font-size: 13px; }
+
+    /* Results */
+    .result-box { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .color-swatch { width: 60px; height: 60px; border-radius: 12px; background: #eee; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; transition: background 0.3s; }
+    .result-data h2 { margin: 0; font-size: 28px; font-weight: 800; }
+    .result-data .status { font-size: 14px; font-weight: 600; margin-top: 4px; display: inline-block; padding: 4px 8px; border-radius: 6px; }
+    
+    .status.ideal { background: rgba(16, 185, 129, 0.1); color: var(--ideal); }
+    .status.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+    .status.neutral { background: var(--bg); color: var(--text-muted); }
+
+    .tech-details { margin-top: 16px; font-size: 12px; color: var(--text-muted); background: var(--bg); padding: 12px; border-radius: 8px; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Medidor de Alcalinidad Total (KH)</h1>
+    <p class="subtitle">Alineá el parche en el recuadro para leer el valor</p>
+  </header>
+
+  <div class="grid">
+    <div class="card" style="padding: 8px;">
+      <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="target"></div>
+      </div>
+      <div class="control-group" style="margin-top: 12px; padding: 0 8px;">
+        <button id="zoomOut" class="btn secondary small">Zoom -</button>
+        <button id="zoomIn" class="btn secondary small">Zoom +</button>
+        <button id="targetDown" class="btn secondary small">Caja -</button>
+        <button id="targetUp" class="btn secondary small">Caja +</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="control-group">
+        <button id="startBtn" class="btn">📸 Encender Cámara</button>
+        <button id="measureBtn" class="btn">🧪 Medir Parche</button>
+      </div>
+      
+      <div class="control-group">
+        <button id="calibrateBtn" class="btn secondary">⚙️ Calibrar Escala</button>
+        <button id="resetBtn" class="btn secondary">♻️ Reset</button>
+      </div>
+
+      <div class="result-box">
+        <div class="color-swatch" id="swatch"></div>
+        <div class="result-data">
+          <h2 id="ppmText">-- ppm</h2>
+          <div id="statusLabel" class="status neutral">Esperando lectura...</div>
+        </div>
+      </div>
+
+      <div class="tech-details">
+        <div id="rgbText">RGB: --, --, --</div>
+        <div id="hexText">HEX: #------</div>
+        <div id="distText">Distancia al perfil (ΔE): --</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// El script ahora usa la escala de alcalinidad (KH)
+const video = document.getElementById('video');
+const target = document.getElementById('target');
+const swatch = document.getElementById('swatch');
+const ppmText = document.getElementById('ppmText');
+const statusLabel = document.getElementById('statusLabel');
+let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
+let calibrating = false; let calibIndex = 0;
+
+// Colores extraídos de la imagen de referencia (Alcalinidad Total (KH))
+// La escala va de 0 a 300 ppm (KH)
+const defaultScale = [
+  {ppm:0,   rgb:[253, 227, 85]},  // Amarillo brillante
+  {ppm:40,  rgb:[227, 213, 93]},  // Amarillo ocre
+  {ppm:80,  rgb:[183, 187, 87]},  // Verde amarillento
+  {ppm:120, rgb:[113, 149, 102]}, // Verde grisáceo
+  {ppm:180, rgb:[79,  111, 89]},  // Verde oscuro
+  {ppm:300, rgb:[46,  84,  84]}   // Verde azulado/petróleo
+];
+
+let calibratedScale = JSON.parse(localStorage.getItem('kh_calibration')) || null;
+let activeScale = calibratedScale || defaultScale;
+
+// Iniciar cámara
+document.getElementById('startBtn').addEventListener('click', () => {
+  if(stream) return;
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(s => { stream = s; video.srcObject = s; video.play(); positionTarget(); })
+    .catch(e => alert('Error cámara: ' + e.message));
+});
+
+// UI Ajustes de cámara
+function positionTarget() {
+  const container = video.parentElement;
+  const size = Math.round(container.clientWidth * rectPercent);
+  target.style.width = size + 'px';
+  target.style.height = size + 'px';
+  target.style.left = (container.clientWidth - size) / 2 + 'px';
+  target.style.top = (container.clientHeight - size) / 2 + 'px';
+}
+window.addEventListener('resize', positionTarget);
+video.addEventListener('loadedmetadata', positionTarget);
+
+document.getElementById('zoomIn').addEventListener('click', () => { zoomLevel = Math.min(3, zoomLevel + 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel = Math.max(1, zoomLevel - 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('targetUp').addEventListener('click', () => { rectPercent = Math.min(0.4, rectPercent + 0.05); positionTarget(); });
+document.getElementById('targetDown').addEventListener('click', () => { rectPercent = Math.max(0.05, rectPercent - 0.05); positionTarget(); });
+
+// Matemáticas de Color (sRGB a CIE-Lab)
+function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbToLab(r, g, b) {
+  const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+  let x = (R*0.4124564 + G*0.3575761 + B*0.1804375) / 0.95047;
+  let y = (R*0.2126729 + G*0.7151522 + B*0.0721750) / 1.00000;
+  let z = (R*0.0193339 + G*0.1191920 + B*0.9503041) / 1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
+  return [(116*f(y)) - 16, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
+}
+function rgbToHex(r,g,b) { return '#'+[r,g,b].map(x=>Math.round(x).toString(16).padStart(2,'0')).join(''); }
+
+function getActiveLabScale() { return activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) })); }
+
+// Lógica principal: Proyección en segmentos
+function measureAndCompute() {
+  if(!stream) { alert('Encendé la cámara primero.'); return null; }
+  
+  // Capturar frame
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  
+  // Compensar el zoom para extraer el área correcta
+  const scale = canvas.width / video.clientWidth;
+  const rectSize = target.clientWidth * scale / zoomLevel;
+  
+  // Dibujar video respetando el zoom (centrado)
+  const zWidth = canvas.width / zoomLevel;
+  const zHeight = canvas.height / zoomLevel;
+  const zX = (canvas.width - zWidth) / 2;
+  const zY = (canvas.height - zHeight) / 2;
+  ctx.drawImage(video, zX, zY, zWidth, zHeight, 0, 0, canvas.width, canvas.height);
+
+  const cx = (canvas.width - rectSize)/2;
+  const cy = (canvas.height - rectSize)/2;
+  const data = ctx.getImageData(cx, cy, rectSize, rectSize).data;
+
+  // Promedio (se eliminó el filtro que bloqueaba el blanco/amarillo)
+  let r=0, g=0, b=0, count=0;
+  for(let i=0; i<data.length; i+=4) { r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
+  const avg = [r/count, g/count, b/count];
+  
+  if(calibrating) return handleCalibration(avg);
+
+  // Proyección
+  const pLab = rgbToLab(...avg);
+  const scaleLab = getActiveLabScale();
+  
+  let bestDist = Infinity;
+  let bestPpm = 0;
+
+  // Iterar por cada tramo de la escala (0-40, 40-80, etc.)
+  for(let i=0; i < scaleLab.length - 1; i++) {
+    const A = scaleLab[i]; const B = scaleLab[i+1];
+    const AB = [B.lab[0]-A.lab[0], B.lab[1]-A.lab[1], B.lab[2]-A.lab[2]];
+    const AP = [pLab[0]-A.lab[0], pLab[1]-A.lab[1], pLab[2]-A.lab[2]];
+    
+    const dotAP_AB = AP[0]*AB[0] + AP[1]*AB[1] + AP[2]*AB[2];
+    const dotAB_AB = AB[0]*AB[0] + AB[1]*AB[1] + AB[2]*AB[2];
+    
+    // Calcular porcentaje de recorrido en el segmento (limitado a 0-1)
+    let t = dotAB_AB === 0 ? 0 : dotAP_AB / dotAB_AB;
+    t = Math.max(0, Math.min(1, t)); 
+    
+    // Calcular punto proyectado en la línea
+    const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
+    
+    // Distancia del color medido a la línea ideal
+    const dist = Math.sqrt(Math.pow(pLab[0]-Proj[0], 2) + Math.pow(pLab[1]-Proj[1], 2) + Math.pow(pLab[2]-Proj[2], 2));
+    
+    if(dist < bestDist) {
+      bestDist = dist;
+      bestPpm = A.ppm + t * (B.ppm - A.ppm);
+    }
+  }
+
+  return { avg, ppm: bestPpm, errorDist: bestDist };
+}
+
+document.getElementById('measureBtn').addEventListener('click', () => {
+  const result = measureAndCompute();
+  if(!result) return;
+  
+  const [r,g,b] = result.avg;
+  swatch.style.background = rgbToHex(r,g,b);
+  // Se agregó 'KH' al texto del resultado
+  ppmText.textContent = result.ppm.toFixed(1) + ' ppm KH';
+  
+  // Rangos de clasificación para alcalinidad (según la carta de referencia)
+  // Ideal se marca entre 80 y 180 ppm
+  const isIdeal = result.ppm >= 80 && result.ppm <= 180;
+  statusLabel.textContent = isIdeal ? 'Nivel Ideal' : (result.ppm < 80 ? 'Nivel Bajo' : 'Nivel Alto');
+  statusLabel.className = 'status ' + (isIdeal ? 'ideal' : 'danger');
+  
+  document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
+  document.getElementById('hexText').textContent = `HEX: ${rgbToHex(r,g,b)}`;
+  document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)} (menor es más preciso)`;
+});
+
+// Sistema de Calibración
+function handleCalibration(avg) {
+  if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+  calibratedScale[calibIndex].rgb = avg.map(Math.round);
+  calibIndex++;
+  
+  if(calibIndex >= calibratedScale.length) {
+    calibrating = false;
+    // Se actualizó la clave de localStorage a 'kh_calibration'
+    localStorage.setItem('kh_calibration', JSON.stringify(calibratedScale));
+    activeScale = calibratedScale;
+    alert('✅ Calibración guardada exitosamente.');
+    document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
+  } else {
+    alert(`Paso ${calibIndex+1}: Enfocá el parche de ${calibratedScale[calibIndex].ppm} ppm y presioná Medir.`);
+  }
+  return null;
+}
+
+document.getElementById('calibrateBtn').addEventListener('click', () => {
+  if(!stream) { alert('Encendé la cámara primero.'); return; }
+  calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+  calibrating = true; calibIndex = 0;
+  document.getElementById('calibrateBtn').textContent = 'Cancel Calibración';
+  alert(`Iniciando calibración. Enfocá el parche de ${calibratedScale[0].ppm} ppm y presioná "Medir Parche".`);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  localStorage.removeItem('kh_calibration');
+  activeScale = defaultScale; calibratedScale = null; calibrating = false;
+  document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
+  alert('Valores de fábrica restaurados.');
+});
+</script>
+</body>
+</html>
