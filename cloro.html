@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Medidor de Cloro Total</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --surface: #ffffff;
+      --primary: #d946ef; /* Color fucsia para representar el cloro */
+      --primary-hover: #c026d3;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --ideal: #10b981; 
+      --danger: #ef4444; 
+      --shadow: 0 4px 20px rgba(0,0,0,0.05);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text-main); padding: 16px; }
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    header { text-align: center; padding: 10px 0; }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px; }
+    p.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 768px) { .grid { grid-template-columns: 1fr 320px; } }
+    .card { background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    .video-container { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; transform-origin: center center; transition: transform 0.2s; }
+    #target { position: absolute; pointer-events: none; border: 2px solid #fff; box-shadow: 0 0 0 4000px rgba(0,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.3); border-radius: 8px; transition: all 0.2s; }
+    #target::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 4px; background: red; border-radius: 50%; }
+    .control-group { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn { flex: 1; min-width: 120px; padding: 12px; border-radius: 10px; border: none; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn.secondary { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); }
+    .result-box { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .color-swatch { width: 60px; height: 60px; border-radius: 12px; background: #eee; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+    .result-data h2 { margin: 0; font-size: 28px; font-weight: 800; }
+    .status { font-size: 14px; font-weight: 600; margin-top: 4px; display: inline-block; padding: 4px 8px; border-radius: 6px; }
+    .status.ideal { background: rgba(16, 185, 129, 0.1); color: var(--ideal); }
+    .status.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+    .tech-details { margin-top: 16px; font-size: 12px; color: var(--text-muted); background: var(--bg); padding: 12px; border-radius: 8px; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Medidor de Cloro Total</h1>
+    <p class="subtitle">Alineá el parche rosa en el recuadro</p>
+  </header>
+
+  <div class="grid">
+    <div class="card" style="padding: 8px;">
+      <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="target"></div>
+      </div>
+      <div class="control-group" style="margin-top: 12px; padding: 0 8px;">
+        <button id="zoomOut" class="btn secondary">Zoom -</button>
+        <button id="zoomIn" class="btn secondary">Zoom +</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="control-group">
+        <button id="startBtn" class="btn">📸 Cámara</button>
+        <button id="measureBtn" class="btn">🧪 Medir Cloro</button>
+      </div>
+      
+      <div class="result-box">
+        <div class="color-swatch" id="swatch"></div>
+        <div class="result-data">
+          <h2 id="ppmText">-- ppm</h2>
+          <div id="statusLabel" class="status">Esperando lectura...</div>
+        </div>
+      </div>
+
+      <div class="tech-details">
+        <div id="rgbText">RGB: --, --, --</div>
+        <div id="distText">ΔE: --</div>
+      </div>
+      
+      <button id="calibrateBtn" class="btn secondary" style="margin-top: 10px; width: 100%;">⚙️ Calibrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const target = document.getElementById('target');
+const swatch = document.getElementById('swatch');
+const ppmText = document.getElementById('ppmText');
+const statusLabel = document.getElementById('statusLabel');
+let stream = null; let zoomLevel = 1;
+
+/**
+ * ESCALA DE CLORO TOTAL (Mapeada de la imagen adjunta)
+ * Se utilizan valores RGB representativos del gradiente rosa.
+ */
+const defaultScale = [
+  {ppm: 0.0, rgb: [255, 255, 255]}, // Blanco (Safe)
+  {ppm: 0.5, rgb: [255, 250, 240]}, // Blanco cremoso/muy suave
+  {ppm: 1.0, rgb: [255, 220, 240]}, // Rosa muy pálido
+  {ppm: 2.0, rgb: [252, 180, 210]}, // Rosa claro
+  {ppm: 4.0, rgb: [240, 140, 190]}, // Rosa medio
+  {ppm: 6.0, rgb: [220, 100, 170]}  // Rosa intenso (Danger)
+];
+
+let activeScale = JSON.parse(localStorage.getItem('cl_calibration')) || defaultScale;
+
+// -- Lógica de Cámara --
+document.getElementById('startBtn').addEventListener('click', () => {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(s => { stream = s; video.srcObject = s; video.play(); positionTarget(); });
+});
+
+function positionTarget() {
+  const size = Math.round(video.parentElement.clientWidth * 0.15);
+  target.style.width = size + 'px'; target.style.height = size + 'px';
+  target.style.left = (video.parentElement.clientWidth - size) / 2 + 'px';
+  target.style.top = (video.parentElement.clientHeight - size) / 2 + 'px';
+}
+
+document.getElementById('zoomIn').addEventListener('click', () => { zoomLevel = Math.min(3, zoomLevel + 0.2); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel = Math.max(1, zoomLevel - 0.2); video.style.transform = `scale(${zoomLevel})`; });
+
+// -- Lógica de Procesamiento de Color --
+function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbToLab(r, g, b) {
+  const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+  let x = (R*0.4124 + G*0.3576 + B*0.1804) / 0.9504;
+  let y = (R*0.2126 + G*0.7152 + B*0.0722);
+  let z = (R*0.0193 + G*0.1192 + B*0.9503) / 1.0888;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
+  return [(116*f(y)) - 16, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
+}
+
+document.getElementById('measureBtn').addEventListener('click', () => {
+  if(!stream) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  
+  // Captura respetando el área visual
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const scale = canvas.width / video.clientWidth;
+  const rectSize = target.clientWidth * scale / zoomLevel;
+  const cx = (canvas.width - rectSize)/2;
+  const cy = (canvas.height - rectSize)/2;
+  
+  const data = ctx.getImageData(cx, cy, rectSize, rectSize).data;
+  let r=0, g=0, b=0, count=0;
+  for(let i=0; i<data.length; i+=4) { r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
+  const avg = [r/count, g/count, b/count];
+  
+  const pLab = rgbToLab(...avg);
+  const scaleLab = activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) }));
+  
+  let bestPpm = 0; let minDelta = Infinity;
+
+  // Interpolar en el segmento más cercano
+  for(let i=0; i < scaleLab.length - 1; i++) {
+    const A = scaleLab[i]; const B = scaleLab[i+1];
+    const AB = [B.lab[0]-A.lab[0], B.lab[1]-A.lab[1], B.lab[2]-A.lab[2]];
+    const AP = [pLab[0]-A.lab[0], pLab[1]-A.lab[1], pLab[2]-A.lab[2]];
+    const dot = AP[0]*AB[0] + AP[1]*AB[1] + AP[2]*AB[2];
+    const mag = AB[0]*AB[0] + AB[1]*AB[1] + AB[2]*AB[2];
+    let t = Math.max(0, Math.min(1, dot/mag));
+    
+    const proj = [A.lab[0]+t*AB[0], A.lab[1]+t*AB[1], A.lab[2]+t*AB[2]];
+    const dist = Math.sqrt(Math.pow(pLab[0]-proj[0],2)+Math.pow(pLab[1]-proj[1],2)+Math.pow(pLab[2]-proj[2],2));
+    
+    if(dist < minDelta) {
+      minDelta = dist;
+      bestPpm = A.ppm + t * (B.ppm - A.ppm);
+    }
+  }
+
+  // UI Updates
+  swatch.style.background = `rgb(${avg[0]},${avg[1]},${avg[2]})`;
+  ppmText.textContent = bestPpm.toFixed(1) + ' ppm';
+  
+  // Basado en la imagen: 0 es Seguro (Safe), >0 es Peligro (Danger)
+  const isSafe = bestPpm < 0.2; 
+  statusLabel.textContent = isSafe ? 'Seguro (Safe)' : 'Peligro (Danger)';
+  statusLabel.className = 'status ' + (isSafe ? 'ideal' : 'danger');
+  
+  document.getElementById('rgbText').textContent = `RGB: ${avg.map(Math.round).join(',')}`;
+  document.getElementById('distText').textContent = `ΔE: ${minDelta.toFixed(2)}`;
+});
+</script>
+</body>
+</html>
