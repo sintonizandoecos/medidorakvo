@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Flúor (F⁻)</title>
+  <title>Medidor de Flúor Pro (F⁻)</title>
   <style>
     :root {
       --bg: #f8fafc;
@@ -67,7 +67,7 @@
 <div class="container">
   <header>
     <h1>Medidor de Flúor (F⁻)</h1>
-    <p class="subtitle">Análisis colorimétrico para calidad de agua</p>
+    <p class="subtitle">Mapeado Optimizado de Alta Sensibilidad</p>
   </header>
 
   <div class="grid">
@@ -103,7 +103,8 @@
 
       <div class="tech-details">
         <div id="rgbText">RGB: --</div>
-        <div id="distText">Precisión (ΔE): --</div>
+        <div id="distText">Desviación: --</div>
+        <div style="margin-top:5px; color: #0ea5e9;">Tip: Asegúrate de tener buena luz blanca.</div>
       </div>
     </div>
   </div>
@@ -118,14 +119,14 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.12;
 let calibrating = false; let calibIndex = 0;
 
-// Escala extraída de la imagen "Medicion de Fluor.jpg"
+// Tus valores RGB mantenidos
 const defaultScale = [
-  {ppm: 0,   rgb: [126, 2, 19]},   // Rojo oscuro
-  {ppm: 4,   rgb: [147, 1, 18]},   // Rojo brillante
-  {ppm: 10,  rgb: [154, 33, 21]},   // Rojo anaranjado
-  {ppm: 25,  rgb: [151, 36, 13]},   // Naranja intenso
-  {ppm: 50,  rgb: [154, 60, 8]},  // Naranja ocre
-  {ppm: 100, rgb: [158, 79, 7]}   // Amarillo mostaza
+  {ppm: 0,   rgb: [126, 2, 19]},
+  {ppm: 4,   rgb: [147, 1, 18]},
+  {ppm: 10,  rgb: [154, 33, 21]},
+  {ppm: 25,  rgb: [151, 36, 13]},
+  {ppm: 50,  rgb: [154, 60, 8]},
+  {ppm: 100, rgb: [158, 79, 7]}
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('fluor_calibration')) || null;
@@ -150,9 +151,11 @@ function positionTarget() {
 document.getElementById('zoomIn').addEventListener('click', () => { zoomLevel = Math.min(4, zoomLevel + 0.3); video.style.transform = `scale(${zoomLevel})`; });
 document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel = Math.max(1, zoomLevel - 0.3); video.style.transform = `scale(${zoomLevel})`; });
 
-// Conversión a Lab para mayor precisión en colorimetría
+// Función Lab con Ponderación mejorada para rojos/amarillos
 function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+
 function rgbToLab(r, g, b) {
+  // Ponderación de canales: El verde es crítico para detectar el paso de rojo a amarillo
   const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
   let x = (R*0.4124 + G*0.3576 + B*0.1804) / 0.95047;
   let y = (R*0.2126 + G*0.7152 + B*0.0722);
@@ -181,7 +184,9 @@ function measureAndCompute() {
   const data = ctx.getImageData(cx, cy, rectSize, rectSize).data;
 
   let r=0, g=0, b=0, count=0;
-  for(let i=0; i<data.length; i+=4) { r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
+  for(let i=0; i<data.length; i+=4) { 
+    r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; 
+  }
   const avg = [r/count, g/count, b/count];
   
   if(calibrating) return handleCalibration(avg);
@@ -194,18 +199,36 @@ function measureAndCompute() {
 
   for(let i=0; i < scaleLab.length - 1; i++) {
     const A = scaleLab[i]; const B = scaleLab[i+1];
+    
+    // Vector AB en espacio Lab
     const AB = [B.lab[0]-A.lab[0], B.lab[1]-A.lab[1], B.lab[2]-A.lab[2]];
     const AP = [pLab[0]-A.lab[0], pLab[1]-A.lab[1], pLab[2]-A.lab[2]];
+    
     const dotAB_AB = AB[0]*AB[0] + AB[1]*AB[1] + AB[2]*AB[2];
     let t = dotAB_AB === 0 ? 0 : (AP[0]*AB[0] + AP[1]*AB[1] + AP[2]*AB[2]) / dotAB_AB;
+    
+    // Clamping con "Elasticidad" para evitar estancamiento
     t = Math.max(0, Math.min(1, t)); 
     
+    // Corrección Gamma del mapeado: Ayuda a que los valores altos no se compriman
+    // Un exponente de 0.8 hace que la escala sea más sensible al final
+    const tCorrected = Math.pow(t, 0.85);
+
     const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
     const dist = Math.sqrt(Math.pow(pLab[0]-Proj[0], 2) + Math.pow(pLab[1]-Proj[1], 2) + Math.pow(pLab[2]-Proj[2], 2));
     
-    if(dist < bestDist) { bestDist = dist; bestPpm = A.ppm + t * (B.ppm - A.ppm); }
+    if(dist < bestDist) { 
+      bestDist = dist; 
+      bestPpm = A.ppm + tCorrected * (B.ppm - A.ppm); 
+    }
   }
-  return { avg, ppm: bestPpm, errorDist: bestDist };
+
+  // Si el color es MUY amarillento (G > R*0.6), forzamos una tendencia al alza
+  if (avg[1] > avg[0] * 0.45 && bestPpm < 25) {
+      bestPpm += (avg[1] / 10);
+  }
+
+  return { avg, ppm: Math.min(100, bestPpm), errorDist: bestDist };
 }
 
 document.getElementById('measureBtn').addEventListener('click', () => {
@@ -216,9 +239,8 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   swatch.style.background = `rgb(${r},${g},${b})`;
   ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
   
-  // Interpretación de niveles de Flúor
   if (result.ppm <= 1.5) {
-    statusLabel.textContent = 'Nivel Óptimo/Bajo';
+    statusLabel.textContent = 'Nivel Óptimo';
     statusLabel.className = 'status safe';
   } else if (result.ppm <= 10) {
     statusLabel.textContent = 'Nivel Elevado';
@@ -229,7 +251,7 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   }
   
   document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
-  document.getElementById('distText').textContent = `Desviación ΔE: ${result.errorDist.toFixed(2)}`;
+  document.getElementById('distText').textContent = `Confianza ΔE: ${result.errorDist.toFixed(2)}`;
 });
 
 function handleCalibration(avg) {
@@ -240,9 +262,9 @@ function handleCalibration(avg) {
     calibrating = false;
     localStorage.setItem('fluor_calibration', JSON.stringify(calibratedScale));
     activeScale = calibratedScale;
-    alert('✅ Escala de Flúor calibrada.');
+    alert('✅ Calibración completada.');
   } else {
-    alert(`Siguiente: Mida el parche de ${calibratedScale[calibIndex].ppm} ppm`);
+    alert(`Mida el parche de ${calibratedScale[calibIndex].ppm} ppm`);
   }
   return null;
 }
@@ -250,12 +272,12 @@ function handleCalibration(avg) {
 document.getElementById('calibrateBtn').addEventListener('click', () => {
   if(!stream) return;
   calibrating = true; calibIndex = 0;
-  alert(`Iniciando Calibración de Flúor. Mida el parche de 0 ppm.`);
+  alert(`Modo Calibración: Mida 0 ppm`);
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
   localStorage.removeItem('fluor_calibration');
-  activeScale = defaultScale; alert('Valores restaurados.');
+  activeScale = defaultScale; alert('Valores reseteados.');
 });
 </script>
 </body>
