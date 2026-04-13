@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Medidor de Flúor (F⁻)</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --primary: #0ea5e9;
+      --primary-hover: #0284c7;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --safe: #22c55e;
+      --unsafe: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 4px 15px rgba(0,0,0,0.08);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text-main); padding: 16px; }
+    
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    header { text-align: center; padding: 10px 0; }
+    h1 { margin: 0; font-size: 24px; font-weight: 800; color: var(--primary); }
+    p.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 768px) { .grid { grid-template-columns: 1fr 340px; } }
+
+    .card { background: var(--surface); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+
+    .video-container { position: relative; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 4/3; }
+    video { width: 100%; height: 100%; object-fit: cover; transform-origin: center; transition: transform 0.2s; }
+    
+    #target {
+      position: absolute; pointer-events: none; border: 3px solid #fff;
+      box-shadow: 0 0 0 4000px rgba(0,0,0,0.5);
+      border-radius: 4px; transition: all 0.2s;
+    }
+
+    .control-group { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn { 
+      flex: 1; min-width: 130px; padding: 14px; border-radius: 12px; border: none; 
+      background: var(--primary); color: #fff; font-size: 14px; font-weight: 700; 
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn.secondary { background: #f1f5f9; color: var(--text-main); border: 1px solid var(--border); }
+
+    .result-box { display: flex; align-items: center; gap: 20px; margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--bg); }
+    .color-swatch { width: 70px; height: 70px; border-radius: 15px; border: 2px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .result-data h2 { margin: 0; font-size: 32px; font-weight: 900; }
+    
+    .status { font-size: 13px; font-weight: 700; padding: 5px 10px; border-radius: 8px; margin-top: 5px; display: inline-block; }
+    .status.safe { background: #dcfce7; color: var(--safe); }
+    .status.warning { background: #fef3c7; color: var(--unsafe); }
+    .status.danger { background: #fee2e2; color: var(--danger); }
+
+    .tech-details { margin-top: 20px; font-size: 11px; color: var(--text-muted); background: #f8fafc; padding: 15px; border-radius: 12px; font-family: monospace; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Medidor de Flúor (F⁻)</h1>
+    <p class="subtitle">Análisis colorimétrico para calidad de agua</p>
+  </header>
+
+  <div class="grid">
+    <div class="card" style="padding: 10px;">
+      <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="target"></div>
+      </div>
+      <div class="control-group" style="margin-top: 15px;">
+        <button id="zoomOut" class="btn secondary">Zoom -</button>
+        <button id="zoomIn" class="btn secondary">Zoom +</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="control-group">
+        <button id="startBtn" class="btn">🔌 Conectar</button>
+        <button id="measureBtn" class="btn">🔬 Medir Flúor</button>
+      </div>
+      
+      <div class="control-group">
+        <button id="calibrateBtn" class="btn secondary">⚙️ Calibrar</button>
+        <button id="resetBtn" class="btn secondary">♻️ Reset</button>
+      </div>
+
+      <div class="result-box">
+        <div class="color-swatch" id="swatch"></div>
+        <div class="result-data">
+          <h2 id="ppmText">-- ppm</h2>
+          <div id="statusLabel" class="status">Esperando...</div>
+        </div>
+      </div>
+
+      <div class="tech-details">
+        <div id="rgbText">RGB: --</div>
+        <div id="distText">Precisión (ΔE): --</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const target = document.getElementById('target');
+const swatch = document.getElementById('swatch');
+const ppmText = document.getElementById('ppmText');
+const statusLabel = document.getElementById('statusLabel');
+let stream = null; let zoomLevel = 1; let rectPercent = 0.12;
+let calibrating = false; let calibIndex = 0;
+
+// Escala extraída de la imagen "Medicion de Fluor.jpg"
+const defaultScale = [
+  {ppm: 0,   rgb: [178, 34, 55]},   // Rojo oscuro
+  {ppm: 4,   rgb: [215, 38, 61]},   // Rojo brillante
+  {ppm: 10,  rgb: [218, 68, 55]},   // Rojo anaranjado
+  {ppm: 25,  rgb: [214, 88, 51]},   // Naranja intenso
+  {ppm: 50,  rgb: [219, 137, 50]},  // Naranja ocre
+  {ppm: 100, rgb: [215, 163, 44]}   // Amarillo mostaza
+];
+
+let calibratedScale = JSON.parse(localStorage.getItem('fluor_calibration')) || null;
+let activeScale = calibratedScale || defaultScale;
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  if(stream) return;
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(s => { stream = s; video.srcObject = s; video.play(); positionTarget(); })
+    .catch(e => alert('Error: ' + e.message));
+});
+
+function positionTarget() {
+  const container = video.parentElement;
+  const size = Math.round(container.clientWidth * rectPercent);
+  target.style.width = size + 'px';
+  target.style.height = size + 'px';
+  target.style.left = (container.clientWidth - size) / 2 + 'px';
+  target.style.top = (container.clientHeight - size) / 2 + 'px';
+}
+
+document.getElementById('zoomIn').addEventListener('click', () => { zoomLevel = Math.min(4, zoomLevel + 0.3); video.style.transform = `scale(${zoomLevel})`; });
+document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel = Math.max(1, zoomLevel - 0.3); video.style.transform = `scale(${zoomLevel})`; });
+
+// Conversión a Lab para mayor precisión en colorimetría
+function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbToLab(r, g, b) {
+  const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+  let x = (R*0.4124 + G*0.3576 + B*0.1804) / 0.95047;
+  let y = (R*0.2126 + G*0.7152 + B*0.0722);
+  let z = (R*0.0193 + G*0.1192 + B*0.9505) / 1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
+  return [(116*f(y)) - 16, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
+}
+
+function measureAndCompute() {
+  if(!stream) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  
+  const scale = canvas.width / video.clientWidth;
+  const rectSize = target.clientWidth * scale / zoomLevel;
+  
+  const zWidth = canvas.width / zoomLevel;
+  const zHeight = canvas.height / zoomLevel;
+  const zX = (canvas.width - zWidth) / 2;
+  const zY = (canvas.height - zHeight) / 2;
+  ctx.drawImage(video, zX, zY, zWidth, zHeight, 0, 0, canvas.width, canvas.height);
+
+  const cx = (canvas.width - rectSize)/2;
+  const cy = (canvas.height - rectSize)/2;
+  const data = ctx.getImageData(cx, cy, rectSize, rectSize).data;
+
+  let r=0, g=0, b=0, count=0;
+  for(let i=0; i<data.length; i+=4) { r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
+  const avg = [r/count, g/count, b/count];
+  
+  if(calibrating) return handleCalibration(avg);
+
+  const pLab = rgbToLab(...avg);
+  const scaleLab = activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) }));
+  
+  let bestDist = Infinity;
+  let bestPpm = 0;
+
+  for(let i=0; i < scaleLab.length - 1; i++) {
+    const A = scaleLab[i]; const B = scaleLab[i+1];
+    const AB = [B.lab[0]-A.lab[0], B.lab[1]-A.lab[1], B.lab[2]-A.lab[2]];
+    const AP = [pLab[0]-A.lab[0], pLab[1]-A.lab[1], pLab[2]-A.lab[2]];
+    const dotAB_AB = AB[0]*AB[0] + AB[1]*AB[1] + AB[2]*AB[2];
+    let t = dotAB_AB === 0 ? 0 : (AP[0]*AB[0] + AP[1]*AB[1] + AP[2]*AB[2]) / dotAB_AB;
+    t = Math.max(0, Math.min(1, t)); 
+    
+    const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
+    const dist = Math.sqrt(Math.pow(pLab[0]-Proj[0], 2) + Math.pow(pLab[1]-Proj[1], 2) + Math.pow(pLab[2]-Proj[2], 2));
+    
+    if(dist < bestDist) { bestDist = dist; bestPpm = A.ppm + t * (B.ppm - A.ppm); }
+  }
+  return { avg, ppm: bestPpm, errorDist: bestDist };
+}
+
+document.getElementById('measureBtn').addEventListener('click', () => {
+  const result = measureAndCompute();
+  if(!result) return;
+  
+  const [r,g,b] = result.avg;
+  swatch.style.background = `rgb(${r},${g},${b})`;
+  ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
+  
+  // Interpretación de niveles de Flúor
+  if (result.ppm <= 1.5) {
+    statusLabel.textContent = 'Nivel Óptimo/Bajo';
+    statusLabel.className = 'status safe';
+  } else if (result.ppm <= 10) {
+    statusLabel.textContent = 'Nivel Elevado';
+    statusLabel.className = 'status warning';
+  } else {
+    statusLabel.textContent = 'Riesgo Fluorosis';
+    statusLabel.className = 'status danger';
+  }
+  
+  document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
+  document.getElementById('distText').textContent = `Desviación ΔE: ${result.errorDist.toFixed(2)}`;
+});
+
+function handleCalibration(avg) {
+  if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
+  calibratedScale[calibIndex].rgb = avg.map(Math.round);
+  calibIndex++;
+  if(calibIndex >= calibratedScale.length) {
+    calibrating = false;
+    localStorage.setItem('fluor_calibration', JSON.stringify(calibratedScale));
+    activeScale = calibratedScale;
+    alert('✅ Escala de Flúor calibrada.');
+  } else {
+    alert(`Siguiente: Mida el parche de ${calibratedScale[calibIndex].ppm} ppm`);
+  }
+  return null;
+}
+
+document.getElementById('calibrateBtn').addEventListener('click', () => {
+  if(!stream) return;
+  calibrating = true; calibIndex = 0;
+  alert(`Iniciando Calibración de Flúor. Mida el parche de 0 ppm.`);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  localStorage.removeItem('fluor_calibration');
+  activeScale = defaultScale; alert('Valores restaurados.');
+});
+</script>
+</body>
+</html>
