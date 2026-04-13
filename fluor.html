@@ -120,12 +120,12 @@ let calibrating = false; let calibIndex = 0;
 
 // Escala extraída de la imagen "Medicion de Fluor.jpg"
 const defaultScale = [
-  {ppm: 0,   rgb: [178, 34, 55]},   // Rojo oscuro
-  {ppm: 4,   rgb: [215, 38, 61]},   // Rojo brillante
-  {ppm: 10,  rgb: [218, 68, 55]},   // Rojo anaranjado
-  {ppm: 25,  rgb: [214, 88, 51]},   // Naranja intenso
-  {ppm: 50,  rgb: [219, 137, 50]},  // Naranja ocre
-  {ppm: 100, rgb: [215, 163, 44]}   // Amarillo mostaza
+  {ppm: 0,   rgb: [209, 37, 45]},   // Rojo oscuro
+  {ppm: 4,   rgb: [227, 23, 42]},   // Rojo brillante
+  {ppm: 10,  rgb: [222, 49, 48]},   // Rojo anaranjado
+  {ppm: 25,  rgb: [230, 64, 45]},   // Naranja intenso
+  {ppm: 50,  rgb: [220, 104, 32]},  // Naranja ocre
+  {ppm: 100, rgb: [238, 149, 34]}   // Amarillo mostaza
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('fluor_calibration')) || null;
