@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Nitrato - Cinta Reactiva 2</title>
+  <title>Medidor de Nitrato - Cinta Reactiva 3</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -75,7 +75,7 @@
 <div class="container">
   <header>
     <h1>Medidor de Nitrato (NO₃⁻)</h1>
-    <p class="subtitle">Análisis optimizado para Cinta Reactiva (Escala: 0 - 500 mg/L)</p>
+    <p class="subtitle">Análisis optimizado para Cinta Reactiva (Escala: 0 - 500 mg/L) 3</p>
   </header>
 
   <div class="grid">
@@ -132,13 +132,13 @@ let calibrating = false; let calibIndex = 0;
 // NUEVA ESCALA REAL EXTRAÍDA DE LA IMAGEN DE LA TIRA (nitrato2.jpg)
 // Transición física: Blanco -> Rosa Tenue -> Rosa Claro -> Magenta -> Magenta Oscuro
 const defaultScale = [
-  {ppm:0,   rgb:[240, 240, 240]}, // Blanco / Gris claro
-  {ppm:10,  rgb:[235, 212, 212]}, // Rosa extremadamente tenue
-  {ppm:25,  rgb:[226, 178, 190]}, // Rosa claro
-  {ppm:50,  rgb:[215, 140, 162]}, // Rosa medio / Magenta suave
-  {ppm:100, rgb:[202, 102, 134]}, // Magenta intermedio
-  {ppm:250, rgb:[188, 62,  108]}, // Magenta intenso
-  {ppm:500, rgb:[158, 38,  82]}   // Magenta profundo / Púrpura oscuro
+  {ppm:0,   rgb:[168, 158, 149]}, // Blanco / Gris claro
+  {ppm:10,  rgb:[161, 140, 136]}, // Rosa extremadamente tenue
+  {ppm:25,  rgb:[168, 122, 129]}, // Rosa claro
+  {ppm:50,  rgb:[174, 93, 116]}, // Rosa medio / Magenta suave
+  {ppm:100, rgb:[207, 99, 136]}, // Magenta intermedio
+  {ppm:250, rgb:[183, 61, 108]}, // Magenta intenso
+  {ppm:500, rgb:[188, 40, 100]}   // Magenta profundo / Púrpura oscuro
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
