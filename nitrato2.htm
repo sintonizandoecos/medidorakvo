@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Nitrato (Pro)</title>
+  <title>Medidor de Nitrato - Cinta Reactiva 2</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -75,7 +75,7 @@
 <div class="container">
   <header>
     <h1>Medidor de Nitrato (NO₃⁻)</h1>
-    <p class="subtitle">Alineá el parche en el recuadro para leer el valor (Mapeado de Alta Sensibilidad)</p>
+    <p class="subtitle">Análisis optimizado para Cinta Reactiva (Escala: 0 - 500 mg/L)</p>
   </header>
 
   <div class="grid">
@@ -129,17 +129,19 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
 let calibrating = false; let calibIndex = 0;
 
-// Colores extraídos de la imagen de referencia (Freshwater Comparison Chart)
+// NUEVA ESCALA REAL EXTRAÍDA DE LA IMAGEN DE LA TIRA (nitrato2.jpg)
+// Transición física: Blanco -> Rosa Tenue -> Rosa Claro -> Magenta -> Magenta Oscuro
 const defaultScale = [
-  {ppm:0,   rgb:[252, 244, 205]}, // Safe - Amarillo pálido
-  {ppm:20,  rgb:[240, 163, 194]}, // Safe - Rosa claro
-  {ppm:40,  rgb:[232, 123, 166]}, // Safe - Rosa medio
-  {ppm:80,  rgb:[213, 61,  134]}, // Unsafe - Rosa oscuro
-  {ppm:160, rgb:[232, 25,  118]}, // Unsafe - Magenta brillante
-  {ppm:200, rgb:[211, 12,  89]}   // Unsafe - Rojo/Magenta profundo
+  {ppm:0,   rgb:[240, 240, 240]}, // Blanco / Gris claro
+  {ppm:10,  rgb:[235, 212, 212]}, // Rosa extremadamente tenue
+  {ppm:25,  rgb:[226, 178, 190]}, // Rosa claro
+  {ppm:50,  rgb:[215, 140, 162]}, // Rosa medio / Magenta suave
+  {ppm:100, rgb:[202, 102, 134]}, // Magenta intermedio
+  {ppm:250, rgb:[188, 62,  108]}, // Magenta intenso
+  {ppm:500, rgb:[158, 38,  82]}   // Magenta profundo / Púrpura oscuro
 ];
 
-let calibratedScale = JSON.parse(localStorage.getItem('no3_calibration')) || null;
+let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
 // Iniciar cámara
@@ -167,7 +169,7 @@ document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel =
 document.getElementById('targetUp').addEventListener('click', () => { rectPercent = Math.min(0.4, rectPercent + 0.05); positionTarget(); });
 document.getElementById('targetDown').addEventListener('click', () => { rectPercent = Math.max(0.05, rectPercent - 0.05); positionTarget(); });
 
-// Matemáticas de Color (sRGB a CIE-Lab con ponderación optimizada)
+// Matemáticas de Color (sRGB a CIE-Lab con ponderación de canal optimizada)
 function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
 
 function rgbToLab(r, g, b) {
@@ -177,16 +179,15 @@ function rgbToLab(r, g, b) {
   let z = (R*0.0193339 + G*0.1191920 + B*0.9503041) / 1.08883;
   const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
   
-  // Ponderación cromática: reducimos ligeramente el peso de L (brillo/sombras) 
-  // para darle máxima relevancia a los ejes A y B (tonalidad)
+  // OPTIMIZACIÓN LAB: Atenuamos la importancia del brillo (L) multiplicándolo por 0.85
+  // Esto obliga al algoritmo a basarse estrictamente en la tonalidad cromática (ejes A y B)
   return [(116*f(y) - 16) * 0.85, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
 }
 
 function rgbToHex(r,g,b) { return '#'+[r,g,b].map(x=>Math.round(x).toString(16).padStart(2,'0')).join(''); }
-
 function getActiveLabScale() { return activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) })); }
 
-// Lógica principal: Proyección en segmentos + Correcciones No Lineales
+// Lógica principal: Proyección Matemática + Nuevos Descubrimientos aplicados
 function measureAndCompute() {
   if(!stream) { alert('Encendé la cámara primero.'); return null; }
   
@@ -230,7 +231,8 @@ function measureAndCompute() {
     let t = dotAB_AB === 0 ? 0 : dotAP_AB / dotAB_AB;
     t = Math.max(0, Math.min(1, t)); 
     
-    // Ajuste Gamma (0.85): "Estira" el recorrido interno en tramos altos para evitar estancamientos
+    // 1. AJUSTE GAMMA (Math.pow(t, 0.85)): Estira el tramo alto de cada intervalo.
+    // Evita el estancamiento visual que sufren las cámaras digitales en la zona de alta concentración.
     const tCorrected = Math.pow(t, 0.85);
     
     const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
@@ -242,15 +244,15 @@ function measureAndCompute() {
     }
   }
 
-  // Regla lógica de Tono para Nitratos:
-  // Cuando pasamos de parches medios a altos (80-200ppm), el canal G (verde) cae drásticamente,
-  // y la proporción de azul respecto al verde aumenta debido a la transición al magenta profundo.
-  if (avg[0] > 140 && avg[2] > avg[1] * 1.1 && bestPpm >= 40 && bestPpm < 200) {
-      // Le otorga un factor de empuje proporcional a la intensidad de absorción del canal verde
-      bestPpm += ((avg[2] - avg[1]) / 4);
+  // 2. DETECCIÓN DE TONO ESPECÍFICA PARA LA TIRA DE NITRATOS:
+  // A medida que sube la concentración, el parche absorbe masivamente la luz Verde.
+  // Si detectamos alta concentración (>= 50 ppm) y el Rojo (R) domina fuertemente al Verde (G),
+  // le damos un empuje analítico controlado para saltar la compresión dinámica del sensor de la cámara.
+  if (bestPpm >= 50 && avg[0] > avg[1] * 1.4 && bestPpm < 500) {
+      bestPpm += ((avg[0] - avg[1]) / 12);
   }
 
-  return { avg, ppm: Math.min(200, bestPpm), errorDist: bestDist };
+  return { avg, ppm: Math.min(500, bestPpm), errorDist: bestDist };
 }
 
 document.getElementById('measureBtn').addEventListener('click', () => {
@@ -261,16 +263,17 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   swatch.style.background = rgbToHex(r,g,b);
   ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
   
-  const isSafe = result.ppm < 60; 
+  // Interpretación sanitaria de Nitratos en agua (Límite usual seguro: < 50 ppm)
+  const isSafe = result.ppm < 50; 
   statusLabel.textContent = isSafe ? 'Nivel Seguro' : 'Nivel Peligroso';
   statusLabel.className = 'status ' + (isSafe ? 'safe' : 'unsafe');
   
   document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
   document.getElementById('hexText').textContent = `HEX: ${rgbToHex(r,g,b)}`;
-  document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)} (menor es más preciso)`;
+  document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)}`;
 });
 
-// Sistema de Calibración
+// Sistema de Calibración adaptado a los 7 puntos de la nueva tira
 function handleCalibration(avg) {
   if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
   calibratedScale[calibIndex].rgb = avg.map(Math.round);
@@ -278,9 +281,9 @@ function handleCalibration(avg) {
   
   if(calibIndex >= calibratedScale.length) {
     calibrating = false;
-    localStorage.setItem('no3_calibration', JSON.stringify(calibratedScale));
+    localStorage.setItem('no3_strip_calibration', JSON.stringify(calibratedScale));
     activeScale = calibratedScale;
-    alert('✅ Calibración guardada exitosamente.');
+    alert('✅ Calibración de tira de nitratos guardada.');
     document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
   } else {
     alert(`Paso ${calibIndex+1}: Enfocá el parche de ${calibratedScale[calibIndex].ppm} ppm y presioná Medir.`);
@@ -297,10 +300,10 @@ document.getElementById('calibrateBtn').addEventListener('click', () => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
-  localStorage.removeItem('no3_calibration');
+  localStorage.removeItem('no3_strip_calibration');
   activeScale = defaultScale; calibratedScale = null; calibrating = false;
   document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
-  alert('Valores de fábrica restaurados.');
+  alert('Valores de fábrica de la tira restaurados.');
 });
 </script>
 </body>
