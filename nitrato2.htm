@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Nitrato - Cinta Reactiva 3</title>
+  <title>Medidor de Nitrato - Cinta Reactiva (Calibrado)</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -32,11 +32,9 @@
 
     .card { background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
 
-    /* Camera Section */
     .video-container { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
     video { width: 100%; height: 100%; object-fit: cover; transform-origin: center center; transition: transform 0.2s; }
     
-    /* Target Box UI */
     #target {
       position: absolute; pointer-events: none; border: 2px solid #fff;
       box-shadow: 0 0 0 4000px rgba(0,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.3);
@@ -44,7 +42,6 @@
     }
     #target::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 4px; background: red; border-radius: 50%; }
 
-    /* Controls */
     .control-group { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
     .btn { 
       flex: 1; min-width: 120px; padding: 12px; border-radius: 10px; border: none; 
@@ -57,7 +54,6 @@
     .btn.secondary:hover { background: var(--bg); }
     .btn.small { min-width: auto; padding: 8px 12px; font-size: 13px; }
 
-    /* Results */
     .result-box { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
     .color-swatch { width: 60px; height: 60px; border-radius: 12px; background: #eee; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; transition: background 0.3s; }
     .result-data h2 { margin: 0; font-size: 28px; font-weight: 800; }
@@ -75,7 +71,7 @@
 <div class="container">
   <header>
     <h1>Medidor de Nitrato (NO₃⁻)</h1>
-    <p class="subtitle">Análisis optimizado para Cinta Reactiva (Escala: 0 - 500 mg/L) 3</p>
+    <p class="subtitle">Mapeado de Precisión con Curva de Calibración Empírica</p>
   </header>
 
   <div class="grid">
@@ -129,20 +125,54 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
 let calibrating = false; let calibIndex = 0;
 
-// NUEVA ESCALA REAL EXTRAÍDA DE LA IMAGEN DE LA TIRA (nitrato2.jpg)
-// Transición física: Blanco -> Rosa Tenue -> Rosa Claro -> Magenta -> Magenta Oscuro
+// Tus nuevos valores RGB manuales introducidos
 const defaultScale = [
   {ppm:0,   rgb:[168, 158, 149]}, // Blanco / Gris claro
   {ppm:10,  rgb:[161, 140, 136]}, // Rosa extremadamente tenue
   {ppm:25,  rgb:[168, 122, 129]}, // Rosa claro
-  {ppm:50,  rgb:[174, 93, 116]}, // Rosa medio / Magenta suave
-  {ppm:100, rgb:[207, 99, 136]}, // Magenta intermedio
-  {ppm:250, rgb:[183, 61, 108]}, // Magenta intenso
+  {ppm:50,  rgb:[174, 93, 116]},  // Rosa medio / Magenta suave
+  {ppm:100, rgb:[207, 99, 136]},  // Magenta intermedio
+  {ppm:250, rgb:[183, 61, 108]},  // Magenta intenso
   {ppm:500, rgb:[188, 40, 100]}   // Magenta profundo / Púrpura oscuro
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
+
+// FUNCIÓN DE RECALIBRACIÓN EMPÍRICA (Mapea lecturas bajas a valores reales exactos)
+function aplicarCurvaCalibracion(rawPpm) {
+  const mapeo = [
+    { medido: 1.6,   real: 0 },
+    { medido: 9.4,   real: 10 },
+    { medido: 24.3,  real: 25 },
+    { medido: 46.7,  real: 50 },
+    { medido: 85.9,  real: 100 },
+    { medido: 217.2, real: 250 },
+    { medido: 441.0, real: 500 }
+  ];
+
+  // Límites inferiores
+  if (rawPpm <= mapeo[0].medido) return 0;
+  
+  // Límites superiores (Extrapolación si se pasa de 441)
+  if (rawPpm >= mapeo[mapeo.length - 1].medido) {
+    const p1 = mapeo[mapeo.length - 2];
+    const p2 = mapeo[mapeo.length - 1];
+    const t = (rawPpm - p1.medido) / (p2.medido - p1.medido);
+    return Math.min(500, p1.real + t * (p2.real - p1.real));
+  }
+
+  // Interpolación lineal interna por tramos
+  for (let i = 0; i < mapeo.length - 1; i++) {
+    const A = mapeo[i];
+    const B = mapeo[i+1];
+    if (rawPpm >= A.medido && rawPpm <= B.medido) {
+      const t = (rawPpm - A.medido) / (B.medido - A.medido);
+      return A.real + t * (B.real - A.real);
+    }
+  }
+  return rawPpm;
+}
 
 // Iniciar cámara
 document.getElementById('startBtn').addEventListener('click', () => {
@@ -152,7 +182,6 @@ document.getElementById('startBtn').addEventListener('click', () => {
     .catch(e => alert('Error cámara: ' + e.message));
 });
 
-// UI Ajustes de cámara
 function positionTarget() {
   const container = video.parentElement;
   const size = Math.round(container.clientWidth * rectPercent);
@@ -169,7 +198,6 @@ document.getElementById('zoomOut').addEventListener('click', () => { zoomLevel =
 document.getElementById('targetUp').addEventListener('click', () => { rectPercent = Math.min(0.4, rectPercent + 0.05); positionTarget(); });
 document.getElementById('targetDown').addEventListener('click', () => { rectPercent = Math.max(0.05, rectPercent - 0.05); positionTarget(); });
 
-// Matemáticas de Color (sRGB a CIE-Lab con ponderación de canal optimizada)
 function srgbToLinear(c) { c/=255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
 
 function rgbToLab(r, g, b) {
@@ -178,16 +206,12 @@ function rgbToLab(r, g, b) {
   let y = (R*0.2126729 + G*0.7151522 + B*0.0721750) / 1.00000;
   let z = (R*0.0193339 + G*0.1191920 + B*0.9503041) / 1.08883;
   const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t) + 16/116;
-  
-  // OPTIMIZACIÓN LAB: Atenuamos la importancia del brillo (L) multiplicándolo por 0.85
-  // Esto obliga al algoritmo a basarse estrictamente en la tonalidad cromática (ejes A y B)
   return [(116*f(y) - 16) * 0.85, 500*(f(x) - f(y)), 200*(f(y) - f(z))];
 }
 
 function rgbToHex(r,g,b) { return '#'+[r,g,b].map(x=>Math.round(x).toString(16).padStart(2,'0')).join(''); }
 function getActiveLabScale() { return activeScale.map(s => ({ ppm: s.ppm, lab: rgbToLab(...s.rgb) })); }
 
-// Lógica principal: Proyección Matemática + Nuevos Descubrimientos aplicados
 function measureAndCompute() {
   if(!stream) { alert('Encendé la cámara primero.'); return null; }
   
@@ -231,8 +255,6 @@ function measureAndCompute() {
     let t = dotAB_AB === 0 ? 0 : dotAP_AB / dotAB_AB;
     t = Math.max(0, Math.min(1, t)); 
     
-    // 1. AJUSTE GAMMA (Math.pow(t, 0.85)): Estira el tramo alto de cada intervalo.
-    // Evita el estancamiento visual que sufren las cámaras digitales en la zona de alta concentración.
     const tCorrected = Math.pow(t, 0.85);
     
     const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
@@ -244,15 +266,15 @@ function measureAndCompute() {
     }
   }
 
-  // 2. DETECCIÓN DE TONO ESPECÍFICA PARA LA TIRA DE NITRATOS:
-  // A medida que sube la concentración, el parche absorbe masivamente la luz Verde.
-  // Si detectamos alta concentración (>= 50 ppm) y el Rojo (R) domina fuertemente al Verde (G),
-  // le damos un empuje analítico controlado para saltar la compresión dinámica del sensor de la cámara.
+  // Ajuste de tono secundario
   if (bestPpm >= 50 && avg[0] > avg[1] * 1.4 && bestPpm < 500) {
       bestPpm += ((avg[0] - avg[1]) / 12);
   }
 
-  return { avg, ppm: Math.min(500, bestPpm), errorDist: bestDist };
+  // APLICACIÓN DE LA NUEVA CURVA DE RECALIBRACIÓN EMPÍRICA
+  const ppmCalibrado = aplicarCurvaCalibracion(bestPpm);
+
+  return { avg, ppm: Math.min(500, ppmCalibrado), errorDist: bestDist };
 }
 
 document.getElementById('measureBtn').addEventListener('click', () => {
@@ -263,7 +285,6 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   swatch.style.background = rgbToHex(r,g,b);
   ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
   
-  // Interpretación sanitaria de Nitratos en agua (Límite usual seguro: < 50 ppm)
   const isSafe = result.ppm < 50; 
   statusLabel.textContent = isSafe ? 'Nivel Seguro' : 'Nivel Peligroso';
   statusLabel.className = 'status ' + (isSafe ? 'safe' : 'unsafe');
@@ -273,7 +294,6 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)}`;
 });
 
-// Sistema de Calibración adaptado a los 7 puntos de la nueva tira
 function handleCalibration(avg) {
   if(!calibratedScale) calibratedScale = JSON.parse(JSON.stringify(defaultScale));
   calibratedScale[calibIndex].rgb = avg.map(Math.round);
@@ -283,7 +303,7 @@ function handleCalibration(avg) {
     calibrating = false;
     localStorage.setItem('no3_strip_calibration', JSON.stringify(calibratedScale));
     activeScale = calibratedScale;
-    alert('✅ Calibración de tira de nitratos guardada.');
+    alert('✅ Calibración guardada exitosamente.');
     document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
   } else {
     alert(`Paso ${calibIndex+1}: Enfocá el parche de ${calibratedScale[calibIndex].ppm} ppm y presioná Medir.`);
