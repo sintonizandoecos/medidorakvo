@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Nitrato - Cinta Reactiva (Calibrado)</title>
+  <title>Medidor de Nitrato - Cinta Reactiva (Calibrado Pro)</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -70,7 +70,7 @@
 
 <div class="container">
   <header>
-    <h1>Medidor de Nitrato (NO₃⁻)</h1>
+    <h1>Medidor de Nitrato (NO₃⁻) ver 5</h1>
     <p class="subtitle">Mapeado de Precisión con Curva de Calibración Empírica</p>
   </header>
 
@@ -125,7 +125,7 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
 let calibrating = false; let calibIndex = 0;
 
-// Tus nuevos valores RGB manuales introducidos
+// Escala manual introducida
 const defaultScale = [
   {ppm:0,   rgb:[168, 158, 149]}, // Blanco / Gris claro
   {ppm:10,  rgb:[161, 140, 136]}, // Rosa extremadamente tenue
@@ -139,13 +139,13 @@ const defaultScale = [
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
-// FUNCIÓN DE RECALIBRACIÓN EMPÍRICA (Mapea lecturas bajas a valores reales exactos)
+// FUNCIÓN DE RECALIBRACIÓN EMPÍRICA ACTUALIZADA
 function aplicarCurvaCalibracion(rawPpm) {
   const mapeo = [
     { medido: 1.6,   real: 0 },
     { medido: 9.4,   real: 10 },
     { medido: 24.3,  real: 25 },
-    { medido: 46.7,  real: 50 },
+    { medido: 41.32, real: 50 },  // AJUSTADO: Antes 46.7, ahora adaptado al valor real de tu sensor
     { medido: 85.9,  real: 100 },
     { medido: 217.2, real: 250 },
     { medido: 441.0, real: 500 }
@@ -266,12 +266,11 @@ function measureAndCompute() {
     }
   }
 
-  // Ajuste de tono secundario
   if (bestPpm >= 50 && avg[0] > avg[1] * 1.4 && bestPpm < 500) {
       bestPpm += ((avg[0] - avg[1]) / 12);
   }
 
-  // APLICACIÓN DE LA NUEVA CURVA DE RECALIBRACIÓN EMPÍRICA
+  // Aplicación de la curva empírica ajustada
   const ppmCalibrado = aplicarCurvaCalibracion(bestPpm);
 
   return { avg, ppm: Math.min(500, ppmCalibrado), errorDist: bestDist };
