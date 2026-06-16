@@ -128,12 +128,12 @@ let calibrating = false; let calibIndex = 0;
 // Escala manual introducida
 const defaultScale = [
   {ppm:0,   rgb:[168, 158, 149]}, // Blanco / Gris claro
-  {ppm:10,  rgb:[161, 140, 136]}, // Rosa extremadamente tenue
-  {ppm:25,  rgb:[168, 122, 129]}, // Rosa claro
-  {ppm:50,  rgb:[174, 93, 116]},  // Rosa medio / Magenta suave
-  {ppm:100, rgb:[207, 99, 136]},  // Magenta intermedio
-  {ppm:250, rgb:[183, 61, 108]},  // Magenta intenso
-  {ppm:500, rgb:[188, 40, 100]}   // Magenta profundo / Púrpura oscuro
+  {ppm:10,  rgb:[168, 145, 146]}, // Rosa extremadamente tenue
+  {ppm:25,  rgb:[173, 118, 135]}, // Rosa claro
+  {ppm:50,  rgb:[178, 85, 118]},  // Rosa medio / Magenta suave
+  {ppm:100, rgb:[192, 97, 136]},  // Magenta intermedio
+  {ppm:250, rgb:[194, 78, 128]},  // Magenta intenso
+  {ppm:500, rgb:[195, 55, 118]}   // Magenta profundo / Púrpura oscuro
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
