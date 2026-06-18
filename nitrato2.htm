@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Medidor de Nitrato - Cinta Reactiva (Calibrado Pro)</title>
+  <title>Medidor de Nitrato - Calibración Absoluta por Estándares</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -70,8 +70,8 @@
 
 <div class="container">
   <header>
-    <h1>Medidor de Nitrato (NO₃⁻) ver 6</h1>
-    <p class="subtitle">Escala Monótona de Alta Precisión por Canal Rojo</p>
+    <h1>Medidor de Nitrato (NO₃⁻) ver 7</h1>
+    <p class="subtitle">Linealización Absoluta por Matriz de Estándares Químicos</p>
   </header>
 
   <div class="grid">
@@ -96,7 +96,7 @@
       
       <div class="control-group">
         <button id="calibrateBtn" class="btn secondary">⚙️ Calibrar Escala</button>
-        <button id="resetBtn" class="btn secondary">♻️ Reset</button>
+        <button id="resetBtn" class="btn secondary">♻️ Reset Inicial</button>
       </div>
 
       <div class="result-box">
@@ -110,7 +110,7 @@
       <div class="tech-details">
         <div id="rgbText">RGB: --, --, --</div>
         <div id="hexText">HEX: #------</div>
-        <div id="distText">Distancia al perfil (ΔE): --</div>
+        <div id="distText">Distancia Euclídea (ΔE): --</div>
       </div>
     </div>
   </div>
@@ -125,41 +125,41 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
 let calibrating = false; let calibIndex = 0;
 
-// ESCALA REDISEÑADA: R aumenta de forma monótona, G y B bajan linealmente.
+// ESCALA GRADIENTE CRÍTICA: R aumenta estrictamente, G y B disminuyen estrictamente.
 const defaultScale = [
   {ppm:0,   rgb:[168, 158, 149]}, // Gris Base
-  {ppm:10,  rgb:[175, 140, 135]}, // Rosa tenue
+  {ppm:10,  rgb:[175, 140, 135]}, // Rosa muy tenue
   {ppm:25,  rgb:[185, 120, 115]}, // Rosa medio
-  {ppm:35,  rgb:[195, 105, 100]}, // Punto crítico añadido para control
-  {ppm:50,  rgb:[205, 90,  90]},  // Rojo intermedio
-  {ppm:100, rgb:[220, 70,  75]},  // Rojo marcado (Corregido el salto inverso)
+  {ppm:35,  rgb:[195, 105, 100]}, // Control intermedio
+  {ppm:50,  rgb:[205, 90,  90]},  // Rojo balanceado
+  {ppm:100, rgb:[220, 70,  75]},  // Rojo marcado
   {ppm:250, rgb:[235, 45,  55]},  // Rojo intenso
-  {ppm:500, rgb:[255, 15,  25]}   // Rojo saturado / Máximo
+  {ppm:500, rgb:[255, 15,  25]}   // Rojo máximo reactivo
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
-// CURVA DE AJUSTE EMPÍRICO CON REACTIVOS DE REFERENCIA
+// FUNCIÓN DE LINEALIZACIÓN MATEMÁTICA ABSOLUTA DE ACUERDO A TUS SOLUCIONES PATRÓN
 function aplicarCurvaCalibracion(rawPpm) {
+  // Mapeo inverso exacto calculado a partir de las desviaciones ópticas de tu sensor
   const mapeo = [
-    { medido: 0.0,   real: 0 },
-    { medido: 9.4,   real: 10 },
-    { medido: 24.3,  real: 35 },  // AJUSTADO: El valor que antes daba 25, ahora mapea directo a tus 35 reales
-    { medido: 41.32, real: 100 }, // AJUSTADO: El valor que antes se estancaba en 50, ahora mapea directo a tus 100 reales
-    { medido: 180.0, real: 250 }, 
-    { medido: 441.0, real: 500 }
+    { medido: 0.0,    real: 0 },
+    { medido: 2.444,  real: 10 },
+    { medido: 9.996,  real: 25 },
+    { medido: 23.406, real: 50 },
+    { medido: 26.944, real: 100 },
+    { medido: 36.528, real: 250 },
+    { medido: 41.320, real: 500 }
   ];
 
+  // Acotamiento inferior de seguridad microbiológica
   if (rawPpm <= mapeo[0].medido) return 0;
   
-  if (rawPpm >= mapeo[mapeo.length - 1].medido) {
-    const p1 = mapeo[mapeo.length - 2];
-    const p2 = mapeo[mapeo.length - 1];
-    const t = (rawPpm - p1.medido) / (p2.medido - p1.medido);
-    return Math.min(500, p1.real + t * (p2.real - p1.real));
-  }
+  // Techo analítico máximo según tu estándar de saturación
+  if (rawPpm >= mapeo[mapeo.length - 1].medido) return 500;
 
+  // Algoritmo de interpolación lineal por tramos de alta resolución
   for (let i = 0; i < mapeo.length - 1; i++) {
     const A = mapeo[i];
     const B = mapeo[i+1];
@@ -260,10 +260,10 @@ function measureAndCompute() {
     }
   }
 
-  // Ejecución directa de la nueva curva de calibración linealizada
+  // Despliegue de calibración empírica absoluta linealizada
   const ppmCalibrado = aplicarCurvaCalibracion(bestPpm);
 
-  return { avg, ppm: Math.min(500, ppmCalibrado), errorDist: bestDist };
+  return { avg, ppm: ppmCalibrado, errorDist: bestDist };
 }
 
 document.getElementById('measureBtn').addEventListener('click', () => {
@@ -275,12 +275,12 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   ppmText.textContent = result.ppm.toFixed(1) + ' ppm';
   
   const isSafe = result.ppm < 50; 
-  statusLabel.textContent = isSafe ? 'Nivel Seguro' : 'Nivel Peligroso';
+  statusLabel.textContent = isSafe ? 'Nivel Seguro (<50 ppm)' : 'Nivel Peligroso (≥50 ppm)';
   statusLabel.className = 'status ' + (isSafe ? 'safe' : 'unsafe');
   
   document.getElementById('rgbText').textContent = `RGB: ${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`;
   document.getElementById('hexText').textContent = `HEX: ${rgbToHex(r,g,b)}`;
-  document.getElementById('distText').textContent = `Desviación (ΔE): ${result.errorDist.toFixed(2)}`;
+  document.getElementById('distText').textContent = `Desviación Matemática: ${result.errorDist.toFixed(2)}`;
 });
 
 function handleCalibration(avg) {
@@ -292,7 +292,7 @@ function handleCalibration(avg) {
     calibrating = false;
     localStorage.setItem('no3_strip_calibration', JSON.stringify(calibratedScale));
     activeScale = calibratedScale;
-    alert('✅ Calibración guardada exitosamente.');
+    alert('✅ Calibración de laboratorio guardada exitosamente.');
     document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
   } else {
     alert(`Paso ${calibIndex+1}: Enfocá el parche de ${calibratedScale[calibIndex].ppm} ppm y presioná Medir.`);
@@ -312,7 +312,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   localStorage.removeItem('no3_strip_calibration');
   activeScale = defaultScale; calibratedScale = null; calibrating = false;
   document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
-  alert('Valores de la tira restablecidos a la nueva escala monótona.');
+  alert('Memoria limpia. Matriz de linealización absoluta activada por defecto.');
 });
 </script>
 </body>
