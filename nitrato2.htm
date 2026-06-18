@@ -70,7 +70,7 @@
 
 <div class="container">
   <header>
-    <h1>Medidor de Nitrato (NO₃⁻) ver 7</h1>
+    <h1>Medidor de Nitrato (NO₃⁻) ver 8</h1>
     <p class="subtitle">Linealización Absoluta por Matriz de Estándares Químicos</p>
   </header>
 
@@ -140,20 +140,21 @@ const defaultScale = [
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
-// FUNCIÓN DE LINEALIZACIÓN MATEMÁTICA ABSOLUTA DE ACUERDO A TUS SOLUCIONES PATRÓN
+// FUNCIÓN DE LINEALIZACIÓN MATEMÁTICA CORREGIDA PARA EL TRAMO DE 25 A 50 PPM
 function aplicarCurvaCalibracion(rawPpm) {
-  // Mapeo inverso exacto calculado a partir de las desviaciones ópticas de tu sensor
+  // Se introdujo el nodo { medido: 15.360, real: 45 } para corregir la sub-linealidad del sensor
   const mapeo = [
     { medido: 0.0,    real: 0 },
     { medido: 2.444,  real: 10 },
     { medido: 9.996,  real: 25 },
+    { medido: 15.360, real: 45 },  // <--- NUEVO ANCLAJE DE AJUSTE DE PRECISIÓN
     { medido: 23.406, real: 50 },
     { medido: 26.944, real: 100 },
     { medido: 36.528, real: 250 },
     { medido: 41.320, real: 500 }
   ];
 
-  // Acotamiento inferior de seguridad microbiológica
+  // Acotamiento inferior de seguridad analítica
   if (rawPpm <= mapeo[0].medido) return 0;
   
   // Techo analítico máximo según tu estándar de saturación
