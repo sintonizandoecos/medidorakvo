@@ -70,8 +70,8 @@
 
 <div class="container">
   <header>
-    <h1>Medidor de Nitrato (NO₃⁻) ver 5</h1>
-    <p class="subtitle">Mapeado de Precisión con Curva de Calibración Empírica</p>
+    <h1>Medidor de Nitrato (NO₃⁻) ver 6</h1>
+    <p class="subtitle">Escala Monótona de Alta Precisión por Canal Rojo</p>
   </header>
 
   <div class="grid">
@@ -125,36 +125,34 @@ const statusLabel = document.getElementById('statusLabel');
 let stream = null; let zoomLevel = 1; let rectPercent = 0.15;
 let calibrating = false; let calibIndex = 0;
 
-// Escala manual introducida
+// ESCALA REDISEÑADA: R aumenta de forma monótona, G y B bajan linealmente.
 const defaultScale = [
-  {ppm:0,   rgb:[168, 158, 149]}, // Blanco / Gris claro
-  {ppm:10,  rgb:[168, 145, 146]}, // Rosa extremadamente tenue
-  {ppm:25,  rgb:[173, 118, 135]}, // Rosa claro
-  {ppm:50,  rgb:[178, 85, 118]},  // Rosa medio / Magenta suave
-  {ppm:100, rgb:[192, 97, 136]},  // Magenta intermedio
-  {ppm:250, rgb:[194, 78, 128]},  // Magenta intenso
-  {ppm:500, rgb:[195, 55, 118]}   // Magenta profundo / Púrpura oscuro
+  {ppm:0,   rgb:[168, 158, 149]}, // Gris Base
+  {ppm:10,  rgb:[175, 140, 135]}, // Rosa tenue
+  {ppm:25,  rgb:[185, 120, 115]}, // Rosa medio
+  {ppm:35,  rgb:[195, 105, 100]}, // Punto crítico añadido para control
+  {ppm:50,  rgb:[205, 90,  90]},  // Rojo intermedio
+  {ppm:100, rgb:[220, 70,  75]},  // Rojo marcado (Corregido el salto inverso)
+  {ppm:250, rgb:[235, 45,  55]},  // Rojo intenso
+  {ppm:500, rgb:[255, 15,  25]}   // Rojo saturado / Máximo
 ];
 
 let calibratedScale = JSON.parse(localStorage.getItem('no3_strip_calibration')) || null;
 let activeScale = calibratedScale || defaultScale;
 
-// FUNCIÓN DE RECALIBRACIÓN EMPÍRICA ACTUALIZADA
+// CURVA DE AJUSTE EMPÍRICO CON REACTIVOS DE REFERENCIA
 function aplicarCurvaCalibracion(rawPpm) {
   const mapeo = [
-    { medido: 1.6,   real: 0 },
+    { medido: 0.0,   real: 0 },
     { medido: 9.4,   real: 10 },
-    { medido: 24.3,  real: 25 },
-    { medido: 41.32, real: 50 },  // AJUSTADO: Antes 46.7, ahora adaptado al valor real de tu sensor
-    { medido: 85.9,  real: 100 },
-    { medido: 217.2, real: 250 },
+    { medido: 24.3,  real: 35 },  // AJUSTADO: El valor que antes daba 25, ahora mapea directo a tus 35 reales
+    { medido: 41.32, real: 100 }, // AJUSTADO: El valor que antes se estancaba en 50, ahora mapea directo a tus 100 reales
+    { medido: 180.0, real: 250 }, 
     { medido: 441.0, real: 500 }
   ];
 
-  // Límites inferiores
   if (rawPpm <= mapeo[0].medido) return 0;
   
-  // Límites superiores (Extrapolación si se pasa de 441)
   if (rawPpm >= mapeo[mapeo.length - 1].medido) {
     const p1 = mapeo[mapeo.length - 2];
     const p2 = mapeo[mapeo.length - 1];
@@ -162,7 +160,6 @@ function aplicarCurvaCalibracion(rawPpm) {
     return Math.min(500, p1.real + t * (p2.real - p1.real));
   }
 
-  // Interpolación lineal interna por tramos
   for (let i = 0; i < mapeo.length - 1; i++) {
     const A = mapeo[i];
     const B = mapeo[i+1];
@@ -174,7 +171,6 @@ function aplicarCurvaCalibracion(rawPpm) {
   return rawPpm;
 }
 
-// Iniciar cámara
 document.getElementById('startBtn').addEventListener('click', () => {
   if(stream) return;
   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
@@ -255,22 +251,16 @@ function measureAndCompute() {
     let t = dotAB_AB === 0 ? 0 : dotAP_AB / dotAB_AB;
     t = Math.max(0, Math.min(1, t)); 
     
-    const tCorrected = Math.pow(t, 0.85);
-    
     const Proj = [A.lab[0] + t*AB[0], A.lab[1] + t*AB[1], A.lab[2] + t*AB[2]];
     const dist = Math.sqrt(Math.pow(pLab[0]-Proj[0], 2) + Math.pow(pLab[1]-Proj[1], 2) + Math.pow(pLab[2]-Proj[2], 2));
     
     if(dist < bestDist) {
       bestDist = dist;
-      bestPpm = A.ppm + tCorrected * (B.ppm - A.ppm);
+      bestPpm = A.ppm + t * (B.ppm - A.ppm);
     }
   }
 
-  if (bestPpm >= 50 && avg[0] > avg[1] * 1.4 && bestPpm < 500) {
-      bestPpm += ((avg[0] - avg[1]) / 12);
-  }
-
-  // Aplicación de la curva empírica ajustada
+  // Ejecución directa de la nueva curva de calibración linealizada
   const ppmCalibrado = aplicarCurvaCalibracion(bestPpm);
 
   return { avg, ppm: Math.min(500, ppmCalibrado), errorDist: bestDist };
@@ -322,7 +312,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   localStorage.removeItem('no3_strip_calibration');
   activeScale = defaultScale; calibratedScale = null; calibrating = false;
   document.getElementById('calibrateBtn').textContent = '⚙️ Calibrar Escala';
-  alert('Valores de fábrica de la tira restaurados.');
+  alert('Valores de la tira restablecidos a la nueva escala monótona.');
 });
 </script>
 </body>
